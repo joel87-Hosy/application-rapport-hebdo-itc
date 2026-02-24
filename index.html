@@ -1,0 +1,1562 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FTECH - Dashboard Mono-Ville 2026</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <style>
+      :root {
+        --itc-blue: #004a99;
+        --itc-orange: #f39200;
+      }
+      body {
+        background-color: #f4f7f6;
+        font-family: "Segoe UI", sans-serif;
+        font-size: 0.9rem;
+      }
+      .navbar {
+        background: var(--itc-blue);
+        color: white;
+        border-bottom: 3px solid var(--itc-orange);
+      }
+      .card-header {
+        background: #fff;
+        font-weight: bold;
+        color: var(--itc-blue);
+        border-bottom: 2px solid #eee;
+      }
+      .table-itc {
+        font-size: 0.8rem;
+        text-align: center;
+      }
+      .bg-itc-dark {
+        background: #343a40 !important;
+        color: white;
+      }
+      .loader-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.9);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+      }
+      .stat-card {
+        border-left: 4px solid var(--itc-blue);
+      }
+      .audit-mono {
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 0.78rem;
+        white-space: pre-wrap;
+      }
+      .audit-hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loader" class="loader-overlay">
+      <div class="spinner-border text-primary" role="status"></div>
+      <h5 class="mt-3">Analyse du canevas en cours...</h5>
+    </div>
+
+    <nav class="navbar navbar-dark p-2 shadow-sm">
+      <div class="container-fluid">
+        <span class="navbar-brand"
+          ><i class="fas fa-chart-bar me-2"></i> ITC - RAPPORT D'ACTIVITÉ
+          SEMAINE 2026</span
+        >
+        <span id="villeLabel" class="badge bg-warning text-dark fs-6"
+          >En attente de fichier</span
+        >
+      </div>
+    </nav>
+
+    <div class="container-fluid p-3">
+      <div
+        id="dropZone"
+        class="card border-2 p-4 text-center mb-4 bg-white shadow-sm"
+        style="cursor: pointer; border-style: dashed !important"
+        onclick="document.getElementById('fileIn').click()"
+      >
+        <input
+          type="file"
+          id="fileIn"
+          hidden
+          accept=".xlsx,.xls"
+          onchange="handleFile(event)"
+        />
+        <i class="fas fa-file-excel fa-3x text-success mb-2"></i>
+        <h5>Téléverser le Canevas (Divo, Gagnoa, etc.)</h5>
+        <p class="text-muted small">
+          Analyse automatique des onglets "INSTANCES" et "RACCORDEMENT"
+        </p>
+      </div>
+
+      <div id="mainDashboard" style="display: none">
+        <div class="d-flex justify-content-end gap-2 mb-3">
+          <button
+            class="btn btn-sm btn-outline-primary"
+            onclick="exportExcelReport()"
+          >
+            <i class="fas fa-file-excel me-1"></i>Exporter Excel
+          </button>
+          <button
+            class="btn btn-sm btn-outline-danger"
+            onclick="exportPdfReport()"
+          >
+            <i class="fas fa-file-pdf me-1"></i>Exporter PDF
+          </button>
+          <button
+            class="btn btn-sm btn-outline-secondary"
+            onclick="exportPowerPointReport()"
+          >
+            <i class="fas fa-file-powerpoint me-1"></i>Exporter PowerPoint
+          </button>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-primary text-white">
+            <i class="fas fa-calendar-check me-2"></i> POINT HEBDO
+          </div>
+          <div class="table-responsive">
+            <table class="table table-bordered table-itc mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>DÉSIGNATION</th>
+                  <th class="bg-itc-dark text-white">VALEURS</th>
+                </tr>
+              </thead>
+              <tbody id="hebdoBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-7">
+            <div class="card shadow-sm mb-4">
+              <div class="card-header">
+                <i class="fas fa-list-ul me-2"></i> RAPPEL DES RELIQUATS (HORS
+                BLOQUÉS)
+              </div>
+              <div class="table-responsive">
+                <table
+                  class="table table-sm table-striped table-bordered table-itc mb-0"
+                >
+                  <thead class="bg-light">
+                    <tr>
+                      <th>Raccordement en cours</th>
+                      <th>Déploiement PCO</th>
+                      <th>Études en cours</th>
+                      <th>Implantation PM</th>
+                      <th>Sans Box Huawei</th>
+                      <th class="bg-itc-dark text-white">TOTAL</th>
+                    </tr>
+                  </thead>
+                  <tbody id="reliquatBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-5">
+            <div class="card shadow-sm mb-4">
+              <div class="card-header">
+                <i class="fas fa-chart-pie me-2"></i> RÉPARTITION DES RELIQUATS
+              </div>
+              <div style="height: 200px; padding: 10px">
+                <canvas id="chartReliquats"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-6">
+            <div class="card shadow-sm mb-4">
+              <div class="card-header">
+                <i class="fas fa-bullseye me-2"></i>RÉALISATION & OBJECTIF
+              </div>
+              <div class="table-responsive">
+                <table class="table table-sm table-bordered table-itc mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Réalisation Semaine</th>
+                      <th>Objectif Moov</th>
+                      <th>Taux réalisation</th>
+                    </tr>
+                  </thead>
+                  <tbody id="objectifBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card shadow-sm mb-4">
+              <div class="card-header">
+                <i class="fas fa-chart-line me-2"></i>ÉVOLUTION JOURNALIÈRE
+              </div>
+              <div style="height: 220px; padding: 10px">
+                <canvas id="chartDaily"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-7">
+            <div class="card shadow-sm mb-4">
+              <div class="card-header">
+                <i class="fas fa-layer-group me-2"></i>RÉPARTITION STATUTAIRE
+                SEMAINE
+              </div>
+              <div class="table-responsive">
+                <table class="table table-sm table-bordered table-itc mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Hors zone</th>
+                      <th>Sans PCO</th>
+                      <th>Avec PCO</th>
+                      <th>Autre DC/DI/INJ</th>
+                      <th>Étude</th>
+                      <th>Raccordé</th>
+                      <th>% raccordé/reçus</th>
+                    </tr>
+                  </thead>
+                  <tbody id="statusBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-5">
+            <div class="card shadow-sm mb-4">
+              <div class="card-header">
+                <i class="fas fa-users-cog me-2"></i>PERFORMANCE ÉQUIPES
+              </div>
+              <div class="table-responsive">
+                <table class="table table-sm table-bordered table-itc mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Entreprise FTTH</th>
+                      <th>Reçus</th>
+                      <th>Traités</th>
+                    </tr>
+                  </thead>
+                  <tbody id="teamBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div
+            class="card-header d-flex justify-content-between align-items-center"
+          >
+            <span
+              ><i class="fas fa-shield-alt me-2"></i>MODE AUDIT DES RÈGLES</span
+            >
+            <div class="form-check form-switch m-0">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="auditToggle"
+                onchange="toggleAudit()"
+              />
+              <label class="form-check-label small" for="auditToggle"
+                >Activer</label
+              >
+            </div>
+          </div>
+          <div id="auditPanel" class="card-body audit-hidden">
+            <div class="table-responsive mb-3">
+              <table class="table table-sm table-bordered table-itc mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Règle auditée</th>
+                    <th>Valeur</th>
+                  </tr>
+                </thead>
+                <tbody id="auditBody"></tbody>
+              </table>
+            </div>
+            <div class="small text-muted mb-2">
+              Échantillon des dossiers comptés (pour vérifier les règles métier)
+            </div>
+            <pre id="auditNotes" class="audit-mono mb-0"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let chartInstance = null;
+      let chartDailyInstance = null;
+      let latestAudit = null;
+      let latestReport = null;
+      const clean = (s) =>
+        String(s || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toUpperCase()
+          .replace(/\s+/g, "")
+          .trim();
+      const normalizeKey = (v) => clean(v).replace(/[^A-Z0-9]/g, "");
+
+      function parseDate(val) {
+        if (!val) return null;
+        if (val instanceof Date) {
+          const d = new Date(val);
+          d.setHours(0, 0, 0, 0);
+          return d;
+        }
+        if (!isNaN(val) && typeof val === "number") {
+          const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+          d.setHours(0, 0, 0, 0);
+          return d;
+        }
+        let s = String(val).trim().replace(/\./g, "/");
+        let p = s.split(/[-/ :]/);
+        if (p.length >= 3) {
+          if (p[2].length === 4) {
+            const d = new Date(p[2], p[1] - 1, p[0]);
+            d.setHours(0, 0, 0, 0);
+            return d;
+          }
+          if (p[0].length === 4) {
+            const d = new Date(p[0], p[1] - 1, p[2]);
+            d.setHours(0, 0, 0, 0);
+            return d;
+          }
+        }
+        const fallback = new Date(s);
+        if (!isNaN(fallback.getTime())) {
+          fallback.setHours(0, 0, 0, 0);
+          return fallback;
+        }
+        return null;
+      }
+
+      function findHeaderRow(rows) {
+        const maxScan = Math.min(rows.length, 15);
+        for (let i = 0; i < maxScan; i++) {
+          const h = (rows[i] || []).map((c) => clean(c));
+          const hasAbo = h.some(
+            (c) =>
+              c.includes("ABONNEMENT") ||
+              c.includes("NUMERO") ||
+              c.includes("MSISDN"),
+          );
+          const hasDate = h.some(
+            (c) =>
+              c.includes("ENVOI") ||
+              c.includes("REELLE") ||
+              c.includes("PREVISIONNELLE"),
+          );
+          if (hasAbo && hasDate) return i;
+        }
+        return 0;
+      }
+
+      function handleFile(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        document.getElementById("loader").style.display = "flex";
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          try {
+            const data = new Uint8Array(evt.target.result);
+            const wb = XLSX.read(data, { type: "array", cellDates: true });
+            processCityData(wb);
+          } catch (err) {
+            alert("Erreur : " + err.message);
+          }
+          document.getElementById("loader").style.display = "none";
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      function formatDate(d) {
+        if (!(d instanceof Date) || isNaN(d.getTime())) return "-";
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+
+      function toggleAudit() {
+        const panel = document.getElementById("auditPanel");
+        const enabled = document.getElementById("auditToggle")?.checked;
+        panel.classList.toggle("audit-hidden", !enabled);
+        if (enabled && latestAudit) renderAudit(latestAudit);
+      }
+
+      function renderAudit(audit) {
+        const body = document.getElementById("auditBody");
+        const notes = document.getElementById("auditNotes");
+        if (!body || !notes || !audit) return;
+
+        const rows = [
+          ["Ville détectée", audit.city || "-"],
+          [
+            "Fenêtre semaine",
+            `${formatDate(audit.weekStart)} -> ${formatDate(audit.weekEnd)}`,
+          ],
+          [
+            "Fenêtre reçues (upload)",
+            `${formatDate(audit.recuWindowStart)} -> ${formatDate(audit.recuWindowEnd)}`,
+          ],
+          ["Lignes utiles lues", audit.sourceRows],
+          ["Dossiers INSTANCES uniques", audit.instanceUnique],
+          ["Dossiers RACCORDEMENT uniques", audit.raccordUnique],
+          ["Report (calculé)", audit.report],
+          [
+            "Total clients (Noms, SUIVI INSTANCE)",
+            audit.totalItcActuelFromNoms || 0,
+          ],
+          ["Reçues ITC (calculé)", audit.recu],
+          [
+            "Formule reçues",
+            "reçues = somme des lignes (2 feuilles) où 'Date d'envoi des instances aux prestataires' est entre J-7 et J (date upload)",
+          ],
+          ["Clients raccordés (calculé)", audit.racc],
+          [
+            "Formule raccordés",
+            "raccordés = somme des lignes (SUIVI RACCORDEMENT) où 'Date réelle de raccordement du client' est entre J-7 et J (date upload)",
+          ],
+          ["Total ITC Actuel (calculé)", audit.totalItcActuelFromNoms || 0],
+          [
+            "Formule total ITC actuel",
+            "total ITC actuel = nombre de cellules non vides de la colonne Noms (SUIVI INSTANCE)",
+          ],
+          ["Bloqués (calculé)", audit.bloque],
+          [
+            "Formule bloqués",
+            "bloqués = nombre de cellules contenant 'bloqué' dans la colonne Avancement (SUIVI INSTANCE)",
+          ],
+          ["Raccordement en cours (calculé)", audit.encours || 0],
+          [
+            "Formule raccordement en cours",
+            "raccordement en cours = nombre de cellules contenant 'en cours de raccordement' dans Avancement (SUIVI INSTANCE)",
+          ],
+          ["Reliquat non raccordé (calculé)", audit.reliquatNonRacc],
+          [
+            "Formule reliquat non raccordé",
+            "reliquat non raccordé = nombre de lignes SUIVI INSTANCE où Avancement ne contient pas 'bloqué'",
+          ],
+          [
+            "Formule report",
+            "report = total clients colonne Noms (SUIVI INSTANCE) - reçues (J-7 à J, date upload)",
+          ],
+        ];
+
+        body.innerHTML = rows
+          .map(
+            ([k, v]) => `
+              <tr>
+                <td class="text-start ps-3">${k}</td>
+                <td class="fw-bold">${v}</td>
+              </tr>
+            `,
+          )
+          .join("");
+
+        const joinIds = (arr) => (arr && arr.length ? arr.join(", ") : "Aucun");
+        notes.textContent =
+          `Reçues ITC (échantillon): ${joinIds(audit.sampleRecu)}\n` +
+          `Raccordés (échantillon): ${joinIds(audit.sampleRacc)}\n` +
+          `Bloqués (échantillon): ${joinIds(audit.sampleBloque)}\n` +
+          `Backlog début semaine (échantillon): ${joinIds(audit.sampleBacklog)}`;
+      }
+
+      function getReportFilename(ext) {
+        const city = (latestReport?.city || "VILLE").replace(/\s+/g, "_");
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, "0");
+        const d = String(today.getDate()).padStart(2, "0");
+        return `RAPPORT_ITC_${city}_${y}${m}${d}.${ext}`;
+      }
+
+      function ensureReportReady() {
+        if (!latestReport) {
+          alert("Aucun rapport à exporter. Téléverse d'abord un canevas.");
+          return false;
+        }
+        return true;
+      }
+
+      function exportExcelReport() {
+        if (!ensureReportReady()) return;
+        const wb = XLSX.utils.book_new();
+
+        const kpi = latestReport.kpi;
+        const reliquat = latestReport.reliquat;
+        const objectif = latestReport.objectif;
+        const status = latestReport.status;
+
+        const wsSynthese = XLSX.utils.aoa_to_sheet([
+          ["Ville", latestReport.city],
+          [
+            "Fenêtre",
+            `${formatDate(latestReport.weekStart)} - ${formatDate(latestReport.weekEnd)}`,
+          ],
+          [],
+          ["POINT HEBDO", "Valeur"],
+          ["Report de la semaine dernière", kpi.report],
+          ["Reçues ITC", kpi.recu],
+          ["Total ITC Semaine", kpi.totalItcSemaine],
+          ["Clients raccordés", kpi.raccordes],
+          ["Total ITC Actuel", kpi.totalItcActuel],
+          ["Bloqués", kpi.bloques],
+          ["Reliquat non raccordé", kpi.reliquatNonRacc],
+          [],
+          ["RELIQUATS", "Valeur"],
+          ["Raccordement en cours", reliquat.encours],
+          ["Déploiement PCO", reliquat.pco],
+          ["Études en cours", reliquat.etude],
+          ["Implantation PM", reliquat.pm],
+          ["Sans Box Huawei", reliquat.noBox],
+          ["Total reliquats", reliquat.total],
+          [],
+          ["OBJECTIF", "Valeur"],
+          ["Réalisation semaine", objectif.realisation],
+          ["Objectif Moov", objectif.objectifMoov],
+          ["Taux réalisation", `${objectif.taux.toFixed(2)}%`],
+          [],
+          ["STATUTS SEMAINE", "Valeur"],
+          ["Hors zone", status.horsZone],
+          ["Sans PCO", status.sansPco],
+          ["Avec PCO", status.avecPco],
+          ["Autre DC/DI/INJ", status.autre],
+          ["Étude", status.etude],
+          ["Raccordé", status.raccorde],
+          ["% raccordé/reçus", `${status.pourcentage.toFixed(2)}%`],
+        ]);
+        XLSX.utils.book_append_sheet(wb, wsSynthese, "Synthese");
+
+        const wsDaily = XLSX.utils.aoa_to_sheet([
+          ["Date", "Reçues", "Raccordées"],
+          ...latestReport.daily.labels.map((label, i) => [
+            label,
+            latestReport.daily.recues[i] || 0,
+            latestReport.daily.raccordes[i] || 0,
+          ]),
+        ]);
+        XLSX.utils.book_append_sheet(wb, wsDaily, "Evolution_journaliere");
+
+        const wsTeams = XLSX.utils.aoa_to_sheet([
+          ["Entreprise FTTH", "Reçus", "Traités"],
+          ...latestReport.teams.map((t) => [t.team, t.recus, t.traites]),
+        ]);
+        XLSX.utils.book_append_sheet(wb, wsTeams, "Equipes");
+
+        const a = latestReport.audit;
+        const wsAudit = XLSX.utils.aoa_to_sheet([
+          ["Règle auditée", "Valeur"],
+          ["Ville détectée", a.city],
+          [
+            "Fenêtre semaine",
+            `${formatDate(a.weekStart)} -> ${formatDate(a.weekEnd)}`,
+          ],
+          ["Lignes utiles lues", a.sourceRows],
+          ["Dossiers INSTANCES uniques", a.instanceUnique],
+          ["Dossiers RACCORDEMENT uniques", a.raccordUnique],
+          ["Report (calculé)", a.report],
+          [
+            "Total clients (Noms, SUIVI INSTANCE)",
+            a.totalItcActuelFromNoms || 0,
+          ],
+          [
+            "Formule report",
+            "report = total clients colonne Noms (SUIVI INSTANCE) - reçues (J-7 à J, date upload)",
+          ],
+          ["Reçues ITC", a.recu],
+          ["Clients raccordés", a.racc],
+          ["Total ITC Actuel", a.totalItcActuelFromNoms || 0],
+          [
+            "Formule total ITC actuel",
+            "total ITC actuel = nombre de cellules non vides de la colonne Noms (SUIVI INSTANCE)",
+          ],
+          ["Bloqués", a.bloque],
+          ["Reliquat non raccordé", a.reliquatNonRacc],
+          [
+            "Formule reliquat non raccordé",
+            "reliquat non raccordé = nombre de lignes SUIVI INSTANCE où Avancement ne contient pas 'bloqué'",
+          ],
+          ["Échantillon Reçues", (a.sampleRecu || []).join(", ")],
+          ["Échantillon Raccordés", (a.sampleRacc || []).join(", ")],
+          ["Échantillon Bloqués", (a.sampleBloque || []).join(", ")],
+          ["Échantillon Backlog", (a.sampleBacklog || []).join(", ")],
+        ]);
+        XLSX.utils.book_append_sheet(wb, wsAudit, "Audit");
+
+        XLSX.writeFile(wb, getReportFilename("xlsx"));
+      }
+
+      function exportPdfReport() {
+        if (!ensureReportReady()) return;
+        const jspdf = window.jspdf;
+        if (!jspdf?.jsPDF) {
+          alert("Librairie PDF indisponible. Vérifie la connexion internet.");
+          return;
+        }
+
+        const doc = new jspdf.jsPDF();
+        const r = latestReport;
+        const k = r.kpi;
+
+        doc.setFontSize(14);
+        doc.text(`Rapport ITC - ${r.city}`, 14, 14);
+        doc.setFontSize(10);
+        doc.text(
+          `Fenêtre: ${formatDate(r.weekStart)} - ${formatDate(r.weekEnd)}`,
+          14,
+          20,
+        );
+
+        doc.autoTable({
+          startY: 26,
+          head: [["Point hebdo", "Valeur"]],
+          body: [
+            ["Report de la semaine dernière", k.report],
+            ["Reçues ITC", k.recu],
+            ["Total ITC Semaine", k.totalItcSemaine],
+            ["Clients raccordés", k.raccordes],
+            ["Total ITC Actuel", k.totalItcActuel],
+            ["Bloqués", k.bloques],
+            ["Reliquat non raccordé", k.reliquatNonRacc],
+          ],
+        });
+
+        doc.autoTable({
+          startY: doc.lastAutoTable.finalY + 6,
+          head: [["Statut", "Valeur"]],
+          body: [
+            ["Raccordement en cours", r.reliquat.encours],
+            ["Déploiement PCO", r.reliquat.pco],
+            ["Études en cours", r.reliquat.etude],
+            ["Implantation PM", r.reliquat.pm],
+            ["Sans Box Huawei", r.reliquat.noBox],
+            ["Total", r.reliquat.total],
+          ],
+        });
+
+        doc.autoTable({
+          startY: doc.lastAutoTable.finalY + 6,
+          head: [["Indicateur", "Valeur"]],
+          body: [
+            ["Réalisation semaine", r.objectif.realisation],
+            ["Objectif Moov", r.objectif.objectifMoov],
+            ["Taux réalisation", `${r.objectif.taux.toFixed(2)}%`],
+            ["Hors zone", r.status.horsZone],
+            ["Sans PCO", r.status.sansPco],
+            ["Avec PCO", r.status.avecPco],
+            ["Autre DC/DI/INJ", r.status.autre],
+            ["Étude", r.status.etude],
+            ["Raccordé", r.status.raccorde],
+            ["% raccordé/reçus", `${r.status.pourcentage.toFixed(2)}%`],
+          ],
+        });
+
+        doc.addPage();
+        doc.setFontSize(12);
+        doc.text("Performance équipes", 14, 14);
+        doc.autoTable({
+          startY: 18,
+          head: [["Entreprise FTTH", "Reçus", "Traités"]],
+          body: (r.teams || []).map((t) => [t.team, t.recus, t.traites]),
+        });
+
+        doc.setFontSize(12);
+        doc.text("Évolution journalière", 14, doc.lastAutoTable.finalY + 8);
+        doc.autoTable({
+          startY: doc.lastAutoTable.finalY + 12,
+          head: [["Date", "Reçues", "Raccordées"]],
+          body: r.daily.labels.map((label, i) => [
+            label,
+            r.daily.recues[i] || 0,
+            r.daily.raccordes[i] || 0,
+          ]),
+        });
+
+        doc.save(getReportFilename("pdf"));
+      }
+
+      function exportPowerPointReport() {
+        if (!ensureReportReady()) return;
+        const PptxGenJS = window.PptxGenJS;
+        if (!PptxGenJS) {
+          alert(
+            "Librairie PowerPoint indisponible. Vérifie la connexion internet.",
+          );
+          return;
+        }
+
+        const r = latestReport;
+        const k = r.kpi;
+        const pptx = new PptxGenJS();
+        pptx.layout = "LAYOUT_WIDE";
+        pptx.author = "ITC Dashboard";
+        pptx.subject = `Rapport ITC ${r.city}`;
+        pptx.title = `Rapport ITC ${r.city}`;
+
+        const chartReliquatsCanvas = document.getElementById("chartReliquats");
+        const chartDailyCanvas = document.getElementById("chartDaily");
+        const reliquatsImg = chartReliquatsCanvas?.toDataURL("image/png");
+        const dailyImg = chartDailyCanvas?.toDataURL("image/png");
+
+        const slide1 = pptx.addSlide();
+        slide1.addText(`Rapport ITC - ${r.city}`, {
+          x: 0.5,
+          y: 0.2,
+          w: 12,
+          h: 0.4,
+          fontSize: 22,
+          bold: true,
+          color: "0A3A7A",
+        });
+        slide1.addText(
+          `Fenêtre: ${formatDate(r.weekStart)} - ${formatDate(r.weekEnd)}`,
+          {
+            x: 0.5,
+            y: 0.62,
+            w: 12,
+            h: 0.3,
+            fontSize: 12,
+            color: "333333",
+          },
+        );
+        slide1.addTable(
+          [
+            [{ text: "Point hebdo" }, { text: "Valeur" }],
+            ["Report de la semaine dernière", String(k.report)],
+            ["Reçues ITC", String(k.recu)],
+            ["Total ITC Semaine", String(k.totalItcSemaine)],
+            ["Clients raccordés", String(k.raccordes)],
+            ["Total ITC Actuel", String(k.totalItcActuel)],
+            ["Bloqués", String(k.bloques)],
+            ["Reliquat non raccordé", String(k.reliquatNonRacc)],
+          ],
+          {
+            x: 0.5,
+            y: 1.0,
+            w: 6.3,
+            h: 3.5,
+            fontSize: 11,
+            border: { type: "solid", color: "D9D9D9", pt: 1 },
+            fill: "FFFFFF",
+          },
+        );
+        slide1.addTable(
+          [
+            [{ text: "Reliquats" }, { text: "Valeur" }],
+            ["Raccordement en cours", String(r.reliquat.encours)],
+            ["Déploiement PCO", String(r.reliquat.pco)],
+            ["Études en cours", String(r.reliquat.etude)],
+            ["Implantation PM", String(r.reliquat.pm)],
+            ["Sans Box Huawei", String(r.reliquat.noBox)],
+            ["Total", String(r.reliquat.total)],
+          ],
+          {
+            x: 7.0,
+            y: 1.0,
+            w: 5.8,
+            h: 3.0,
+            fontSize: 10,
+            border: { type: "solid", color: "D9D9D9", pt: 1 },
+            fill: "FFFFFF",
+          },
+        );
+        if (reliquatsImg) {
+          slide1.addImage({
+            data: reliquatsImg,
+            x: 7.0,
+            y: 4.1,
+            w: 5.8,
+            h: 2.6,
+          });
+        }
+
+        const slide2 = pptx.addSlide();
+        slide2.addText("Répartition Statutaire & Objectif", {
+          x: 0.5,
+          y: 0.2,
+          w: 12,
+          h: 0.4,
+          fontSize: 18,
+          bold: true,
+          color: "0A3A7A",
+        });
+        slide2.addTable(
+          [
+            [{ text: "Indicateur" }, { text: "Valeur" }],
+            ["Réalisation semaine", String(r.objectif.realisation)],
+            ["Objectif Moov", String(r.objectif.objectifMoov)],
+            ["Taux réalisation", `${r.objectif.taux.toFixed(2)}%`],
+            ["Hors zone", String(r.status.horsZone)],
+            ["Sans PCO", String(r.status.sansPco)],
+            ["Avec PCO", String(r.status.avecPco)],
+            ["Autre DC/DI/INJ", String(r.status.autre)],
+            ["Étude", String(r.status.etude)],
+            ["Raccordé", String(r.status.raccorde)],
+            ["% raccordé/reçus", `${r.status.pourcentage.toFixed(2)}%`],
+          ],
+          {
+            x: 0.5,
+            y: 0.9,
+            w: 6.4,
+            h: 4.7,
+            fontSize: 10,
+            border: { type: "solid", color: "D9D9D9", pt: 1 },
+            fill: "FFFFFF",
+          },
+        );
+        if (dailyImg) {
+          slide2.addImage({
+            data: dailyImg,
+            x: 7.1,
+            y: 0.9,
+            w: 5.7,
+            h: 3.2,
+          });
+        }
+        slide2.addTable(
+          [
+            [{ text: "Date" }, { text: "Reçues" }, { text: "Raccordées" }],
+            ...r.daily.labels.map((label, i) => [
+              label,
+              String(r.daily.recues[i] || 0),
+              String(r.daily.raccordes[i] || 0),
+            ]),
+          ],
+          {
+            x: 7.1,
+            y: 4.2,
+            w: 5.7,
+            h: 2.6,
+            fontSize: 8,
+            border: { type: "solid", color: "D9D9D9", pt: 1 },
+            fill: "FFFFFF",
+          },
+        );
+
+        const slide3 = pptx.addSlide();
+        slide3.addText("Performance équipes", {
+          x: 0.5,
+          y: 0.2,
+          w: 12,
+          h: 0.4,
+          fontSize: 18,
+          bold: true,
+          color: "0A3A7A",
+        });
+        slide3.addTable(
+          [
+            [
+              { text: "Entreprise FTTH" },
+              { text: "Reçus" },
+              { text: "Traités" },
+            ],
+            ...((r.teams || []).length
+              ? r.teams.map((t) => [
+                  t.team,
+                  String(t.recus || 0),
+                  String(t.traites || 0),
+                ])
+              : [["Aucune donnée", "0", "0"]]),
+          ],
+          {
+            x: 0.5,
+            y: 0.9,
+            w: 12.3,
+            h: 5.8,
+            fontSize: 10,
+            border: { type: "solid", color: "D9D9D9", pt: 1 },
+            fill: "FFFFFF",
+          },
+        );
+
+        pptx.writeFile({ fileName: getReportFilename("pptx") });
+      }
+
+      function processCityData(wb) {
+        let detectedCity = "VILLE INCONNUE";
+        let stats = {
+          report: 0,
+          recu: 0,
+          racc: 0,
+          bloque: 0,
+          encours: 0,
+          pco: 0,
+          etude: 0,
+          pm: 0,
+          noBox: 0,
+        };
+        let bloqueFromAvancement = 0;
+        let totalItcActuelFromNoms = 0;
+        let encoursFromAvancement = 0;
+
+        const canonicalCity = (value) => {
+          const v = clean(value);
+          if (v.includes("ABIDJAN")) return "ABIDJAN";
+          if (v.includes("BOUAKE")) return "BOUAKE";
+          if (v.includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
+          if (v.includes("DIVO")) return "DIVO";
+          if (v.includes("GAGNOA")) return "GAGNOA";
+          if (v.includes("SANPEDRO")) return "SANPEDRO";
+          if (v.includes("KATIOLA")) return "KATIOLA";
+          return "";
+        };
+
+        const records = [];
+        let selectedCity = "";
+
+        wb.SheetNames.forEach((name) => {
+          let sN = clean(name);
+          if (sN.includes("TCD") || sN.includes("RECAP")) return;
+
+          const isMainInstance =
+            sN.includes("SUIVI") && sN.includes("INSTANCE");
+          const isMainRaccord =
+            sN.includes("SUIVI") && sN.includes("RACCORDEMENT");
+          if (!isMainInstance && !isMainRaccord) return;
+
+          const sheetCity = canonicalCity(sN);
+          if (!selectedCity && sheetCity) selectedCity = sheetCity;
+
+          let rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
+          if (rows.length < 2) return;
+
+          const headerRowIndex = findHeaderRow(rows);
+          let h = (rows[headerRowIndex] || []).map((c) => clean(c));
+          let iVille = h.findIndex(
+            (c) => c.includes("VILLE") || c.includes("COMMU"),
+          );
+          let iEnvoi = h.findIndex((c) => c.includes("ENVOI"));
+          let iRacc = h.findIndex((c) => c.includes("REELLE"));
+          let iPrev = h.findIndex((c) => c.includes("PREVISIONNELLE"));
+          let iAvance = h.findIndex((c) => c.includes("AVANCE"));
+          let iStatut = h.findIndex((c) => c.includes("STATUT"));
+          let iEtudeTechnique = h.findIndex((c) =>
+            c.includes("ETUDETECHNIQUE"),
+          );
+          let iProbleme = h.findIndex((c) => c.includes("PROBLEME"));
+          let iEntreprise = h.findIndex((c) => c.includes("ENTREPRISE"));
+          let iNoms = h.findIndex((c) => c === "NOMS" || c.includes("NOMS"));
+          const idIndexes = h
+            .map((c, idx) => ({ c, idx }))
+            .filter(
+              ({ c }) =>
+                c.includes("ABONNEMENT") ||
+                c.includes("NUMERO") ||
+                c.includes("MSISDN") ||
+                c.includes("DOSSIER") ||
+                c.includes("REFERENCE") ||
+                c === "REF" ||
+                c.includes("CLIENT") ||
+                c.includes("CONTACT") ||
+                c.includes("TEL") ||
+                c.includes("TELEPHONE"),
+            )
+            .map(({ idx }) => idx);
+
+          const cellAt = (row, idx) => (idx >= 0 ? row[idx] : null);
+
+          for (let i = headerRowIndex + 1; i < rows.length; i++) {
+            let r = rows[i];
+            const rowCity = iVille >= 0 ? clean(r[iVille]) : "";
+            const rowCityCanonical = canonicalCity(rowCity);
+            if (!selectedCity && rowCityCanonical)
+              selectedCity = rowCityCanonical;
+            if (
+              selectedCity &&
+              rowCityCanonical &&
+              rowCityCanonical !== selectedCity
+            )
+              continue;
+            if (selectedCity && sheetCity && sheetCity !== selectedCity)
+              continue;
+
+            const dossierKey = idIndexes
+              .map((idx) => normalizeKey(cellAt(r, idx)))
+              .filter(Boolean)
+              .join("|");
+            const hasAboValue = dossierKey.length > 0;
+            const vEnvoi = cellAt(r, iEnvoi);
+            const vRacc = cellAt(r, iRacc);
+            const vPrev = cellAt(r, iPrev);
+            const vAvance = cellAt(r, iAvance);
+            const vStatut = cellAt(r, iStatut);
+            const vEtudeTechnique = cellAt(r, iEtudeTechnique);
+            const vProbleme = cellAt(r, iProbleme);
+            const vEntreprise = cellAt(r, iEntreprise);
+            const vNoms = cellAt(r, iNoms);
+
+            const dEnv = parseDate(vEnvoi);
+            const dRac = parseDate(vRacc);
+            const dPrev = parseDate(vPrev);
+            const status = clean(vAvance || vStatut);
+            const avancement = clean(vAvance);
+            const statutCol = clean(vStatut);
+            const etudeTechniqueCol = clean(vEtudeTechnique);
+            const problemeCol = clean(vProbleme);
+            const sansPcoSignal = isMainInstance
+              ? etudeTechniqueCol.includes("SANSPCO") ||
+                etudeTechniqueCol.includes("SANS PCO")
+              : isMainRaccord
+                ? statutCol.includes("SANSPCO") ||
+                  statutCol.includes("SANS PCO")
+                : false;
+            const autreKeywords = [
+              "INDISPONIBLE",
+              "INJOIGNABLE",
+              "DESISTEMENT",
+              "NUMEROINCORRECT",
+            ];
+            const autreSignal =
+              isMainInstance &&
+              iProbleme >= 0 &&
+              autreKeywords.some((keyword) => problemeCol.includes(keyword));
+
+            if (isMainInstance && iAvance >= 0 && avancement.includes("BLOQ")) {
+              bloqueFromAvancement += 1;
+            }
+            if (
+              isMainInstance &&
+              iAvance >= 0 &&
+              avancement.includes("RACCORDEMENT") &&
+              avancement.includes("ENCOURS")
+            ) {
+              encoursFromAvancement += 1;
+            }
+            if (isMainInstance && iNoms >= 0 && clean(vNoms).length > 0) {
+              totalItcActuelFromNoms += 1;
+            }
+
+            const hasUsefulData =
+              !!dEnv || !!dRac || !!dPrev || !!status || hasAboValue;
+            if (!hasUsefulData) continue;
+
+            if (detectedCity === "VILLE INCONNUE") {
+              const cityFromRow = rowCityCanonical;
+              const cityFromSheet = sheetCity;
+              if (cityFromRow) detectedCity = cityFromRow;
+              else if (cityFromSheet) detectedCity = cityFromSheet;
+            }
+
+            records.push({
+              sN,
+              dossierKey,
+              dEnv,
+              dRac,
+              dPrev,
+              status,
+              avancement,
+              sansPcoSignal,
+              autreSignal,
+              entreprise: clean(vEntreprise),
+              rowIndex: i,
+            });
+          }
+        });
+
+        const instanceMap = new Map();
+        const pickLatestByEnv = (current, incoming) => {
+          if (!current) return incoming;
+          const cDate = current.dEnv instanceof Date ? current.dEnv : null;
+          const iDate = incoming.dEnv instanceof Date ? incoming.dEnv : null;
+          if (cDate && iDate) return iDate >= cDate ? incoming : current;
+          if (!cDate && iDate) return incoming;
+          if (cDate && !iDate) return current;
+          return incoming.rowIndex >= current.rowIndex ? incoming : current;
+        };
+
+        records.forEach((rec) => {
+          if (!rec.sN.includes("INSTANCE")) return;
+          const key = rec.dossierKey || `INST-${rec.rowIndex}`;
+          instanceMap.set(key, pickLatestByEnv(instanceMap.get(key), rec));
+        });
+
+        const raccordMap = new Map();
+        records.forEach((rec) => {
+          if (!rec.sN.includes("RACCORDEMENT")) return;
+          const key = rec.dossierKey || `RACC-${rec.rowIndex}`;
+          if (!raccordMap.has(key)) {
+            raccordMap.set(key, {
+              maxEnv: rec.dEnv || null,
+              firstEnv: rec.dEnv || null,
+              maxRac: rec.dRac || null,
+              firstRac: rec.dRac || null,
+              statuses: new Set(rec.status ? [rec.status] : []),
+            });
+            return;
+          }
+
+          const agg = raccordMap.get(key);
+          if (rec.dEnv instanceof Date) {
+            if (!(agg.maxEnv instanceof Date) || rec.dEnv > agg.maxEnv)
+              agg.maxEnv = rec.dEnv;
+            if (!(agg.firstEnv instanceof Date) || rec.dEnv < agg.firstEnv)
+              agg.firstEnv = rec.dEnv;
+          }
+          if (rec.dRac instanceof Date) {
+            if (!(agg.maxRac instanceof Date) || rec.dRac > agg.maxRac)
+              agg.maxRac = rec.dRac;
+            if (!(agg.firstRac instanceof Date) || rec.dRac < agg.firstRac)
+              agg.firstRac = rec.dRac;
+          }
+          if (rec.status) agg.statuses.add(rec.status);
+        });
+
+        const envoiDates = Array.from(raccordMap.values())
+          .map((v) => v.maxEnv)
+          .filter((d) => d instanceof Date && !isNaN(d.getTime()));
+        const racDates = Array.from(raccordMap.values())
+          .map((v) => v.maxRac)
+          .filter((d) => d instanceof Date && !isNaN(d.getTime()));
+
+        const weekEnd = envoiDates.length
+          ? new Date(Math.max(...envoiDates.map((d) => d.getTime())))
+          : racDates.length
+            ? new Date(Math.max(...racDates.map((d) => d.getTime())))
+            : new Date();
+        weekEnd.setHours(0, 0, 0, 0);
+
+        const weekStart = new Date(weekEnd);
+        weekStart.setDate(weekEnd.getDate() - 7);
+        const campaignYear = weekEnd.getFullYear();
+
+        const recuWindowEnd = new Date();
+        recuWindowEnd.setHours(0, 0, 0, 0);
+        const recuWindowStart = new Date(recuWindowEnd);
+        recuWindowStart.setDate(recuWindowEnd.getDate() - 7);
+
+        const inWindow = (d) =>
+          d instanceof Date && d >= weekStart && d <= weekEnd;
+        const inRecuWindow = (d) =>
+          d instanceof Date && d >= recuWindowStart && d <= recuWindowEnd;
+
+        const raccordEntries = Array.from(raccordMap.entries());
+        const receivedThisWeekEntries = raccordEntries.filter(([, v]) =>
+          inWindow(v.maxEnv),
+        );
+        const connectedThisWeekEntries = raccordEntries.filter(([, v]) =>
+          inWindow(v.maxRac),
+        );
+
+        const receivedByEnvoiRows = records.filter((rec) =>
+          inRecuWindow(rec.dEnv),
+        );
+        const connectedByRaccordementRows = records.filter(
+          (rec) => rec.sN.includes("RACCORDEMENT") && inRecuWindow(rec.dRac),
+        );
+        stats.recu = receivedByEnvoiRows.length;
+        stats.racc = connectedByRaccordementRows.length;
+
+        const blockedEntries = Array.from(instanceMap.entries());
+        const blockedPopulation = blockedEntries.map(([, v]) => v);
+        stats.bloque = bloqueFromAvancement;
+        const reliquatNonRaccFromAvancement = records.filter(
+          (rec) =>
+            rec.sN.includes("INSTANCE") &&
+            !String(rec.avancement || "").includes("BLOQ"),
+        ).length;
+        stats.reliquatNonRaccFromAvancement = reliquatNonRaccFromAvancement;
+
+        const backlogEntries = raccordEntries.filter(
+          ([, v]) =>
+            v.firstEnv instanceof Date &&
+            v.firstEnv.getFullYear() === campaignYear &&
+            v.firstEnv <= weekStart &&
+            (!(v.firstRac instanceof Date) || v.firstRac >= weekStart),
+        );
+        const reliquatNonRaccCalc = backlogEntries.length;
+
+        stats.report = Math.max(0, totalItcActuelFromNoms - stats.recu);
+        stats.totalItcActuelFromNoms = totalItcActuelFromNoms;
+
+        stats.pm = blockedPopulation.filter(
+          (v) => v.status.includes("PM") || v.status.includes("IMPLANT"),
+        ).length;
+        stats.noBox = blockedPopulation.filter(
+          (v) =>
+            v.status.includes("BOX") ||
+            v.status.includes("SANSBOX") ||
+            v.status.includes("SANSBOXHUAWEI"),
+        ).length;
+
+        stats.etude = receivedThisWeekEntries.filter(([, v]) => {
+          const s = Array.from(v.statuses).join(" ");
+          return s.includes("ETUDE");
+        }).length;
+        stats.pco = receivedThisWeekEntries.filter(([, v]) => {
+          const s = Array.from(v.statuses).join(" ");
+          return (
+            s.includes("PCO") &&
+            !s.includes("SANS PCO") &&
+            !s.includes("SANSPCO")
+          );
+        }).length;
+        stats.encours = encoursFromAvancement;
+
+        const days = [];
+        for (
+          let d = new Date(weekStart);
+          d <= weekEnd;
+          d.setDate(d.getDate() + 1)
+        ) {
+          days.push(new Date(d));
+        }
+
+        const dayCount = (entries, pickDate) =>
+          days.map(
+            (day) =>
+              entries.filter(([, val]) => {
+                const dt = pickDate(val);
+                return dt instanceof Date && dt.getTime() === day.getTime();
+              }).length,
+          );
+
+        const dailyDetails = {
+          labels: days.map(
+            (d) =>
+              `${String(d.getDate()).padStart(2, "0")}/${String(
+                d.getMonth() + 1,
+              ).padStart(2, "0")}`,
+          ),
+          recues: dayCount(raccordEntries, (v) => v.maxEnv),
+          raccordes: dayCount(raccordEntries, (v) => v.maxRac),
+        };
+
+        const statusText = ([, v]) => Array.from(v.statuses || []).join(" ");
+        const sansPcoFromReceivedWeek = receivedByEnvoiRows.filter(
+          (rec) => !!rec.sansPcoSignal,
+        ).length;
+        const autreFromReceivedWeek = receivedByEnvoiRows.filter(
+          (rec) => !!rec.autreSignal,
+        ).length;
+        const statusDetails = {
+          horsZone: receivedThisWeekEntries.filter((entry) =>
+            statusText(entry).includes("HORS ZONE"),
+          ).length,
+          sansPco: sansPcoFromReceivedWeek,
+          avecPco: receivedThisWeekEntries.filter((entry) => {
+            const s = statusText(entry);
+            return (
+              s.includes("PCO") &&
+              !s.includes("SANS PCO") &&
+              !s.includes("SANSPCO") &&
+              !s.includes("ETUDE")
+            );
+          }).length,
+          autre: autreFromReceivedWeek,
+          etude: receivedThisWeekEntries.filter((entry) =>
+            statusText(entry).includes("ETUDE"),
+          ).length,
+          raccorde: stats.racc,
+          pourcentage: stats.recu > 0 ? (stats.racc / stats.recu) * 100 : 0,
+        };
+
+        const teamMap = new Map();
+        records.forEach((rec) => {
+          if (!rec.sN.includes("RACCORDEMENT") || !rec.dossierKey) return;
+          const team = rec.entreprise || "INCONNUE";
+          if (!teamMap.has(team)) {
+            teamMap.set(team, { recus: new Set(), traites: new Set() });
+          }
+          const t = teamMap.get(team);
+          if (rec.dEnv instanceof Date && inWindow(rec.dEnv)) {
+            t.recus.add(rec.dossierKey);
+          }
+          if (rec.dRac instanceof Date && inWindow(rec.dRac)) {
+            t.traites.add(rec.dossierKey);
+          }
+        });
+
+        const teamDetails = Array.from(teamMap.entries())
+          .map(([team, vals]) => ({
+            team,
+            recus: vals.recus.size,
+            traites: vals.traites.size,
+          }))
+          .filter((x) => x.recus > 0 || x.traites > 0)
+          .sort((a, b) => b.traites - a.traites || b.recus - a.recus)
+          .slice(0, 12);
+
+        const details = {
+          objectif: {
+            realisation: stats.racc,
+            objectifMoov: 600,
+            taux: 600 > 0 ? (stats.racc / 600) * 100 : 0,
+          },
+          daily: dailyDetails,
+          status: statusDetails,
+          teams: teamDetails,
+        };
+
+        detectedCity = selectedCity || detectedCity;
+
+        const sampleIds = (entries) =>
+          entries
+            .slice(0, 8)
+            .map(([k]) => k)
+            .filter(Boolean);
+        const sampleRecuRows = receivedByEnvoiRows
+          .slice(0, 8)
+          .map((rec) => rec.dossierKey || `${rec.sN}#${rec.rowIndex}`)
+          .filter(Boolean);
+        const sampleRaccRows = connectedByRaccordementRows
+          .slice(0, 8)
+          .map((rec) => rec.dossierKey || `${rec.sN}#${rec.rowIndex}`)
+          .filter(Boolean);
+
+        const audit = {
+          city: detectedCity,
+          weekStart,
+          weekEnd,
+          sourceRows: records.length,
+          instanceUnique: instanceMap.size,
+          raccordUnique: raccordMap.size,
+          recuWindowStart,
+          recuWindowEnd,
+          report: stats.report,
+          totalItcActuelFromNoms,
+          recu: stats.recu,
+          racc: stats.racc,
+          bloque: stats.bloque,
+          encours: stats.encours,
+          reliquatNonRacc: reliquatNonRaccFromAvancement,
+          sampleRecu: sampleRecuRows,
+          sampleRacc: sampleRaccRows,
+          sampleBloque: sampleIds(blockedEntries),
+          sampleBacklog: sampleIds(backlogEntries),
+        };
+
+        renderUI(detectedCity, stats, audit, details);
+      }
+      function renderUI(city, s, audit, details) {
+        document.getElementById("villeLabel").innerText = "VILLE : " + city;
+        document.getElementById("mainDashboard").style.display = "block";
+        latestAudit = audit || null;
+        if (document.getElementById("auditToggle")?.checked && latestAudit) {
+          renderAudit(latestAudit);
+        }
+
+        // Calculs selon tes règles strictes
+        const report = s.report; // 1064 pour Abidjan / 66 pour Divo
+        const recu = s.recu; // Reçus de la semaine
+        const totalItcSemaine = report + recu; // Somme des deux
+        const raccordes = s.racc; // Raccordés de la semaine
+        const totalItcActuel =
+          s.totalItcActuelFromNoms ?? totalItcSemaine - raccordes;
+        const bloques = s.bloque; // Statut "Bloqué"
+        const reliquatNonRacc =
+          s.reliquatNonRaccFromAvancement ??
+          Math.max(0, totalItcActuel - bloques);
+
+        latestReport = {
+          city,
+          weekStart: audit?.weekStart || null,
+          weekEnd: audit?.weekEnd || null,
+          kpi: {
+            report,
+            recu,
+            totalItcSemaine,
+            raccordes,
+            totalItcActuel,
+            bloques,
+            reliquatNonRacc,
+          },
+          reliquat: {
+            encours: s.encours,
+            pco: s.pco,
+            etude: s.etude,
+            pm: s.pm,
+            noBox: s.noBox,
+            total: s.encours + s.pco + s.etude + s.pm + s.noBox,
+          },
+          objectif: details?.objectif || {
+            realisation: 0,
+            objectifMoov: 600,
+            taux: 0,
+          },
+          daily: details?.daily || { labels: [], recues: [], raccordes: [] },
+          status: details?.status || {
+            horsZone: 0,
+            sansPco: 0,
+            avecPco: 0,
+            autre: 0,
+            etude: 0,
+            raccorde: 0,
+            pourcentage: 0,
+          },
+          teams: details?.teams || [],
+          audit: audit || null,
+        };
+
+        const hb = document.getElementById("hebdoBody");
+
+        // Ordre d'affichage imposé
+        const rows = [
+          { label: "Report de la semaine dernière", val: report, class: "" },
+          { label: "Reçues ITC", val: recu, class: "table-info" },
+          {
+            label: "Total ITC Semaine",
+            val: totalItcSemaine,
+            class: "fw-bold",
+          },
+          {
+            label: "Clients raccordés",
+            val: raccordes,
+            class: "text-success fw-bold",
+          },
+          {
+            label: "Total ITC Actuel",
+            val: totalItcActuel,
+            class: "table-warning fw-bold",
+          },
+          { label: "Bloqués", val: bloques, class: "text-danger" },
+          {
+            label: "Reliquat non raccordé",
+            val: reliquatNonRacc,
+            class: "bg-itc-dark text-white",
+          },
+        ];
+
+        hb.innerHTML = rows
+          .map(
+            (r) => `
+            <tr class="${r.class}">
+                <td class="text-start ps-4">${r.label}</td>
+                <td class="fs-5 fw-bold">${r.val}</td>
+            </tr>
+        `,
+          )
+          .join("");
+
+        // Mise à jour du tableau des Reliquats (Basé sur Avancement hors bloqués)
+        const totalReliquats = s.encours + s.pco + s.etude + s.pm + s.noBox;
+        document.getElementById("reliquatBody").innerHTML = `
+            <tr>
+                <td>${s.encours}</td>
+                <td>${s.pco}</td>
+                <td>${s.etude}</td>
+                <td>${s.pm}</td>
+                <td>${s.noBox}</td>
+                <td class="bg-itc-dark fw-bold text-white">${totalReliquats}</td>
+            </tr>
+        `;
+
+        document.getElementById("objectifBody").innerHTML = `
+          <tr>
+            <td class="fw-bold">${details.objectif.realisation}</td>
+            <td>${details.objectif.objectifMoov}</td>
+            <td class="fw-bold">${details.objectif.taux.toFixed(1)}%</td>
+          </tr>
+        `;
+
+        document.getElementById("statusBody").innerHTML = `
+          <tr>
+            <td>${details.status.horsZone}</td>
+            <td>${details.status.sansPco}</td>
+            <td>${details.status.avecPco}</td>
+            <td>${details.status.autre}</td>
+            <td>${details.status.etude}</td>
+            <td class="fw-bold">${details.status.raccorde}</td>
+            <td class="fw-bold">${details.status.pourcentage.toFixed(2)}%</td>
+          </tr>
+        `;
+
+        document.getElementById("teamBody").innerHTML = details.teams.length
+          ? details.teams
+              .map(
+                (t) => `
+                  <tr>
+                    <td class="text-start ps-2">${t.team}</td>
+                    <td>${t.recus}</td>
+                    <td class="fw-bold">${t.traites}</td>
+                  </tr>
+                `,
+              )
+              .join("")
+          : `<tr><td colspan="3" class="text-muted">Aucune donnée équipe sur la semaine</td></tr>`;
+
+        updateChart(s);
+        updateDailyChart(details.daily);
+      }
+      function updateChart(s) {
+        if (chartInstance) chartInstance.destroy();
+        const ctx = document.getElementById("chartReliquats").getContext("2d");
+        chartInstance = new Chart(ctx, {
+          type: "doughnut",
+          data: {
+            labels: ["En cours", "PCO", "Études", "PM", "Sans Box"],
+            datasets: [
+              {
+                data: [s.encours, s.pco, s.etude, s.pm, s.noBox],
+                backgroundColor: [
+                  "#007bff",
+                  "#ffc107",
+                  "#17a2b8",
+                  "#fd7e14",
+                  "#6c757d",
+                ],
+              },
+            ],
+          },
+          options: {
+            maintainAspectRatio: false,
+            plugins: { legend: { position: "right" } },
+          },
+        });
+      }
+
+      function updateDailyChart(daily) {
+        if (chartDailyInstance) chartDailyInstance.destroy();
+        const ctx = document.getElementById("chartDaily").getContext("2d");
+        chartDailyInstance = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: daily.labels,
+            datasets: [
+              {
+                label: "Reçues",
+                data: daily.recues,
+                backgroundColor: "#17a2b8",
+              },
+              {
+                label: "Raccordées",
+                data: daily.raccordes,
+                backgroundColor: "#28a745",
+              },
+            ],
+          },
+          options: {
+            maintainAspectRatio: false,
+            plugins: { legend: { position: "top" } },
+            scales: { y: { beginAtZero: true } },
+          },
+        });
+      }
+    </script>
+  </body>
+</html>
