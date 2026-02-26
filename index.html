@@ -460,7 +460,7 @@
           ["Reliquat non raccordé (calculé)", audit.reliquatNonRacc],
           [
             "Formule reliquat non raccordé",
-            "reliquat non raccordé = nombre de lignes SUIVI INSTANCE où Avancement ne contient pas 'bloqué'",
+            "reliquat non raccordé = raccordement en cours + déploiement PCO + études en cours + implantation PM + sans box huawei",
           ],
           [
             "Formule report",
@@ -600,7 +600,7 @@
           ["Reliquat non raccordé", a.reliquatNonRacc],
           [
             "Formule reliquat non raccordé",
-            "reliquat non raccordé = nombre de lignes SUIVI INSTANCE où Avancement ne contient pas 'bloqué'",
+            "reliquat non raccordé = raccordement en cours + déploiement PCO + études en cours + implantation PM + sans box huawei",
           ],
           ["Échantillon Reçues", (a.sampleRecu || []).join(", ")],
           ["Échantillon Raccordés", (a.sampleRacc || []).join(", ")],
@@ -1071,6 +1071,8 @@
               dPrev,
               status,
               avancement,
+              etudeTechnique: etudeTechniqueCol,
+              probleme: problemeCol,
               sansPcoSignal,
               autreSignal,
               entreprise: clean(vEntreprise),
@@ -1127,28 +1129,14 @@
           if (rec.status) agg.statuses.add(rec.status);
         });
 
-        const envoiDates = Array.from(raccordMap.values())
-          .map((v) => v.maxEnv)
-          .filter((d) => d instanceof Date && !isNaN(d.getTime()));
-        const racDates = Array.from(raccordMap.values())
-          .map((v) => v.maxRac)
-          .filter((d) => d instanceof Date && !isNaN(d.getTime()));
-
-        const weekEnd = envoiDates.length
-          ? new Date(Math.max(...envoiDates.map((d) => d.getTime())))
-          : racDates.length
-            ? new Date(Math.max(...racDates.map((d) => d.getTime())))
-            : new Date();
-        weekEnd.setHours(0, 0, 0, 0);
-
-        const weekStart = new Date(weekEnd);
-        weekStart.setDate(weekEnd.getDate() - 7);
-        const campaignYear = weekEnd.getFullYear();
-
         const recuWindowEnd = new Date();
         recuWindowEnd.setHours(0, 0, 0, 0);
         const recuWindowStart = new Date(recuWindowEnd);
         recuWindowStart.setDate(recuWindowEnd.getDate() - 7);
+
+        const weekEnd = new Date(recuWindowEnd);
+        const weekStart = new Date(recuWindowStart);
+        const campaignYear = weekEnd.getFullYear();
 
         const inWindow = (d) =>
           d instanceof Date && d >= weekStart && d <= weekEnd;
@@ -1175,12 +1163,6 @@
         const blockedEntries = Array.from(instanceMap.entries());
         const blockedPopulation = blockedEntries.map(([, v]) => v);
         stats.bloque = bloqueFromAvancement;
-        const reliquatNonRaccFromAvancement = records.filter(
-          (rec) =>
-            rec.sN.includes("INSTANCE") &&
-            !String(rec.avancement || "").includes("BLOQ"),
-        ).length;
-        stats.reliquatNonRaccFromAvancement = reliquatNonRaccFromAvancement;
 
         const backlogEntries = raccordEntries.filter(
           ([, v]) =>
@@ -1204,19 +1186,28 @@
             v.status.includes("SANSBOXHUAWEI"),
         ).length;
 
-        stats.etude = receivedThisWeekEntries.filter(([, v]) => {
-          const s = Array.from(v.statuses).join(" ");
-          return s.includes("ETUDE");
-        }).length;
-        stats.pco = receivedThisWeekEntries.filter(([, v]) => {
-          const s = Array.from(v.statuses).join(" ");
+        stats.etude = records.filter(
+          (rec) =>
+            rec.sN.includes("INSTANCE") &&
+            String(rec.etudeTechnique || "").includes("ETUDENONREALISEE"),
+        ).length;
+        const pcoFromProbleme = records.filter((rec) => {
+          if (!rec.sN.includes("INSTANCE")) return false;
+          const p = String(rec.probleme || "");
           return (
-            s.includes("PCO") &&
-            !s.includes("SANS PCO") &&
-            !s.includes("SANSPCO")
+            p.includes("HORSZONECOUVERTUREPCO") ||
+            p.includes("INDISPONIBILITEDEPON")
           );
         }).length;
+        const pcoFromAvancement = records.filter((rec) => {
+          if (!rec.sN.includes("INSTANCE")) return false;
+          const a = String(rec.avancement || "");
+          return a.includes("DEPLOIEMENT") && a.includes("PCO");
+        }).length;
+        stats.pco = pcoFromProbleme + pcoFromAvancement;
         stats.encours = encoursFromAvancement;
+        stats.reliquatNonRaccFromColumns =
+          stats.encours + stats.pco + stats.etude + stats.pm + stats.noBox;
 
         const days = [];
         for (
@@ -1344,7 +1335,7 @@
           racc: stats.racc,
           bloque: stats.bloque,
           encours: stats.encours,
-          reliquatNonRacc: reliquatNonRaccFromAvancement,
+          reliquatNonRacc: stats.reliquatNonRaccFromColumns,
           sampleRecu: sampleRecuRows,
           sampleRacc: sampleRaccRows,
           sampleBloque: sampleIds(blockedEntries),
@@ -1370,8 +1361,7 @@
           s.totalItcActuelFromNoms ?? totalItcSemaine - raccordes;
         const bloques = s.bloque; // Statut "Bloqué"
         const reliquatNonRacc =
-          s.reliquatNonRaccFromAvancement ??
-          Math.max(0, totalItcActuel - bloques);
+          s.reliquatNonRaccFromColumns ?? Math.max(0, totalItcActuel - bloques);
 
         latestReport = {
           city,
@@ -1392,7 +1382,7 @@
             etude: s.etude,
             pm: s.pm,
             noBox: s.noBox,
-            total: s.encours + s.pco + s.etude + s.pm + s.noBox,
+            total: reliquatNonRacc,
           },
           objectif: details?.objectif || {
             realisation: 0,
@@ -1454,7 +1444,7 @@
           .join("");
 
         // Mise à jour du tableau des Reliquats (Basé sur Avancement hors bloqués)
-        const totalReliquats = s.encours + s.pco + s.etude + s.pm + s.noBox;
+        const totalReliquats = reliquatNonRacc;
         document.getElementById("reliquatBody").innerHTML = `
             <tr>
                 <td>${s.encours}</td>
