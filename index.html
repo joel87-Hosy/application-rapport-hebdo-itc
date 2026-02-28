@@ -119,6 +119,20 @@
           >
             <i class="fas fa-file-excel me-1"></i>Exporter Excel
           </button>
+          <select
+            id="citySelect"
+            class="form-select form-select-sm w-auto"
+            style="display: none"
+            onchange="onCityChange(this.value)"
+          ></select>
+          <button
+            id="exportAllBtn"
+            class="btn btn-sm btn-outline-success"
+            style="display: none"
+            onclick="exportAllExcel()"
+          >
+            <i class="fas fa-file-excel me-1"></i>Exporter tous (Excel)
+          </button>
           <button
             class="btn btn-sm btn-outline-danger"
             onclick="exportPdfReport()"
@@ -312,6 +326,7 @@
       let chartDailyInstance = null;
       let latestAudit = null;
       let latestReport = null;
+      let latestReportsAll = null; // map city -> report objects
       const clean = (s) =>
         String(s || "")
           .normalize("NFD")
@@ -898,7 +913,7 @@
         pptx.writeFile({ fileName: getReportFilename("pptx") });
       }
 
-      function processCityData(wb) {
+      function computeForCity(wb, targetCity) {
         let detectedCity = "VILLE INCONNUE";
         let stats = {
           report: 0,
@@ -928,7 +943,7 @@
         };
 
         const records = [];
-        let selectedCity = "";
+        let selectedCity = targetCity || "";
 
         wb.SheetNames.forEach((name) => {
           let sN = clean(name);
@@ -1342,7 +1357,191 @@
           sampleBacklog: sampleIds(backlogEntries),
         };
 
-        renderUI(detectedCity, stats, audit, details);
+        return { city: detectedCity, stats, audit, details };
+      }
+
+      function detectCities(wb) {
+        const cities = new Set();
+        const canonicalCityLocal = (value) => {
+          const v = clean(value);
+          if (v.includes("ABIDJAN")) return "ABIDJAN";
+          if (v.includes("BOUAKE")) return "BOUAKE";
+          if (v.includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
+          if (v.includes("DIVO")) return "DIVO";
+          if (v.includes("GAGNOA")) return "GAGNOA";
+          if (v.includes("SANPEDRO")) return "SANPEDRO";
+          if (v.includes("KATIOLA")) return "KATIOLA";
+          return "";
+        };
+
+        wb.SheetNames.forEach((name) => {
+          const sN = clean(name);
+          const fromName = canonicalCityLocal(sN);
+          if (fromName) cities.add(fromName);
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
+          const maxScan = Math.min(rows.length, 50);
+          for (let i = 0; i < maxScan; i++) {
+            const row = rows[i] || [];
+            for (const cell of row) {
+              const c = canonicalCityLocal(cell);
+              if (c) cities.add(c);
+            }
+          }
+        });
+        return Array.from(cities);
+      }
+
+      function processCityData(wb) {
+        // detect cities in workbook
+        const found = detectCities(wb);
+        if (!found || found.length === 0) {
+          // fallback: compute as before (single city auto-detect)
+          const single = computeForCity(wb, "");
+          if (single) {
+            latestReportsAll = { [single.city || "VILLE"]: single };
+            latestReport = {
+              city: single.city,
+              weekStart: single.audit?.weekStart || null,
+              weekEnd: single.audit?.weekEnd || null,
+              kpi: {
+                report: single.stats.report,
+                recu: single.stats.recu,
+                totalItcSemaine:
+                  (single.stats.report || 0) + (single.stats.recu || 0),
+                raccordes: single.stats.racc,
+                totalItcActuel: single.audit?.totalItcActuelFromNoms || 0,
+                bloques: single.stats.bloque,
+                reliquatNonRacc: single.audit?.reliquatNonRacc || 0,
+              },
+              reliquat: {
+                encours: single.stats.encours,
+                pco: single.stats.pco,
+                etude: single.stats.etude,
+                pm: single.stats.pm,
+                noBox: single.stats.noBox,
+                total: single.audit?.reliquatNonRacc || 0,
+              },
+              objectif: single.details?.objectif || {},
+              daily: single.details?.daily || {},
+              status: single.details?.status || {},
+              teams: single.details?.teams || [],
+              audit: single.audit || null,
+            };
+            latestAudit = single.audit || null;
+            renderUI(single.city, single.stats, single.audit, single.details);
+          }
+          return;
+        }
+
+        // multiple cities detected: compute for each
+        const reports = {};
+        found.forEach((c) => {
+          const res = computeForCity(wb, c);
+          if (res) {
+            // build a similar latestReport-like object for reuse
+            reports[c] = {
+              city: res.city,
+              stats: res.stats,
+              audit: res.audit,
+              details: res.details,
+            };
+          }
+        });
+        latestReportsAll = reports;
+
+        // populate selector
+        const sel = document.getElementById("citySelect");
+        sel.innerHTML = Object.keys(reports)
+          .map((k) => `<option value="${k}">${k}</option>`)
+          .join("");
+        sel.style.display = "inline-block";
+        document.getElementById("exportAllBtn").style.display = "inline-block";
+
+        // show first city by default
+        const first = Object.keys(reports)[0];
+        if (first) onCityChange(first);
+      }
+
+      function onCityChange(city) {
+        if (!latestReportsAll || !latestReportsAll[city]) return;
+        const rep = latestReportsAll[city];
+        latestAudit = rep.audit || null;
+        latestReport = {
+          city: rep.city,
+          weekStart: rep.audit?.weekStart || null,
+          weekEnd: rep.audit?.weekEnd || null,
+          kpi: {
+            report: rep.stats.report,
+            recu: rep.stats.recu,
+            totalItcSemaine: (rep.stats.report || 0) + (rep.stats.recu || 0),
+            raccordes: rep.stats.racc,
+            totalItcActuel: rep.audit?.totalItcActuelFromNoms || 0,
+            bloques: rep.stats.bloque,
+            reliquatNonRacc: rep.audit?.reliquatNonRacc || 0,
+          },
+          reliquat: {
+            encours: rep.stats.encours,
+            pco: rep.stats.pco,
+            etude: rep.stats.etude,
+            pm: rep.stats.pm,
+            noBox: rep.stats.noBox,
+            total: rep.audit?.reliquatNonRacc || 0,
+          },
+          objectif: rep.details?.objective || rep.details?.objectif || {},
+          daily: rep.details?.daily || {},
+          status: rep.details?.status || {},
+          teams: rep.details?.teams || [],
+          audit: rep.audit || null,
+        };
+        renderUI(rep.city, rep.stats, rep.audit, rep.details);
+      }
+
+      function exportAllExcel() {
+        if (!latestReportsAll)
+          return alert("Aucun rapport multi-ville disponible.");
+        const wb = XLSX.utils.book_new();
+        Object.keys(latestReportsAll).forEach((city) => {
+          const r = latestReportsAll[city];
+          const kpi = {
+            report: r.stats.report,
+            recu: r.stats.recu,
+            totalItcSemaine: (r.stats.report || 0) + (r.stats.recu || 0),
+            raccordes: r.stats.racc,
+            totalItcActuel: r.audit?.totalItcActuelFromNoms || 0,
+            bloques: r.stats.bloque,
+            reliquatNonRacc: r.audit?.reliquatNonRacc || 0,
+          };
+          const reliquat = {
+            encours: r.stats.encours,
+            pco: r.stats.pco,
+            etude: r.stats.etude,
+            pm: r.stats.pm,
+            noBox: r.stats.noBox,
+            total: r.audit?.reliquatNonRacc || 0,
+          };
+
+          const wsSynthese = XLSX.utils.aoa_to_sheet([
+            ["Ville", city],
+            [
+              "Fenêtre",
+              `${formatDate(r.audit?.weekStart)} - ${formatDate(r.audit?.weekEnd)}`,
+            ],
+            [],
+            ["POINT HEBDO", "Valeur"],
+            ["Report de la semaine dernière", kpi.report],
+            ["Reçues ITC", kpi.recu],
+            ["Total ITC Semaine", kpi.totalItcSemaine],
+            ["Clients raccordés", kpi.raccordes],
+            ["Total ITC Actuel", kpi.totalItcActuel],
+            ["Bloqués", kpi.bloques],
+            ["Reliquat non raccordé", kpi.reliquatNonRacc],
+          ]);
+          XLSX.utils.book_append_sheet(wb, wsSynthese, `Synthese_${city}`);
+        });
+        XLSX.writeFile(
+          wb,
+          `RAPPORT_ITC_ToutesVilles_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        );
       }
       function renderUI(city, s, audit, details) {
         document.getElementById("villeLabel").innerText = "VILLE : " + city;
