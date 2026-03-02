@@ -1392,9 +1392,47 @@
       }
 
       function processCityData(wb) {
-        // detect cities in workbook
+        // detect cities in workbook (by sheet name / scanned cells)
         const found = detectCities(wb);
-        if (!found || found.length === 0) {
+        // also collect cities explicitly present in a 'Ville' column across sheets
+        const citiesFromColumn = new Set();
+        const canonicalize = (v) => {
+          const s = clean(String(v || ""));
+          if (!s) return "";
+          if (s.includes("ABIDJAN")) return "ABIDJAN";
+          if (s.includes("BOUAKE")) return "BOUAKE";
+          if (s.includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
+          if (s.includes("DIVO")) return "DIVO";
+          if (s.includes("GAGNOA")) return "GAGNOA";
+          if (s.includes("SANPEDRO")) return "SANPEDRO";
+          if (s.includes("KATIOLA")) return "KATIOLA";
+          // fallback to cleaned token (preserve non-canonical city names)
+          return s;
+        };
+        wb.SheetNames.forEach((name) => {
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
+          if (!rows || rows.length < 2) return;
+          const headerRowIndex = findHeaderRow(rows);
+          const h = (rows[headerRowIndex] || []).map((c) => clean(c));
+          const iVille = h.findIndex(
+            (c) =>
+              c.includes("VILLE") || c.includes("COMM") || c.includes("LOCAL"),
+          );
+          if (iVille >= 0) {
+            for (let r = headerRowIndex + 1; r < rows.length; r++) {
+              const cell = rows[r] && rows[r][iVille];
+              if (cell == null) continue;
+              const can = canonicalize(cell);
+              if (can) citiesFromColumn.add(can);
+            }
+          }
+        });
+        // merge detected cities and cities from 'Ville' columns
+        const mergedCities = Array.from(
+          new Set([...(found || []), ...Array.from(citiesFromColumn)]),
+        );
+
+        if (!mergedCities || mergedCities.length === 0) {
           // fallback: compute as before (single city auto-detect)
           const single = computeForCity(wb, "");
           if (single) {
@@ -1433,9 +1471,9 @@
           return;
         }
 
-        // multiple cities detected: compute for each
+        // multiple cities detected: compute for each (preserve rules in computeForCity)
         const reports = {};
-        found.forEach((c) => {
+        mergedCities.forEach((c) => {
           const res = computeForCity(wb, c);
           if (res) {
             // build a similar latestReport-like object for reuse
