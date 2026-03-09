@@ -1475,6 +1475,52 @@
           return;
         }
 
+        // If we detected exactly one city from mergedCities, treat it like a single-city upload
+        if (mergedCities.length === 1) {
+          const singleCity = mergedCities[0];
+          const single = computeForCity(wb, singleCity);
+          if (single) {
+            latestReportsAll = { [single.city || singleCity]: single };
+            // hide multi-city controls
+            const sel = document.getElementById("citySelect");
+            if (sel) sel.style.display = "none";
+            const exportAllBtn = document.getElementById("exportAllBtn");
+            if (exportAllBtn) exportAllBtn.style.display = "none";
+
+            latestAudit = single.audit || null;
+            latestReport = {
+              city: single.city,
+              weekStart: single.audit?.weekStart || null,
+              weekEnd: single.audit?.weekEnd || null,
+              kpi: {
+                report: single.stats.report,
+                recu: single.stats.recu,
+                totalItcSemaine:
+                  (single.stats.report || 0) + (single.stats.recu || 0),
+                raccordes: single.stats.racc,
+                totalItcActuel: single.audit?.totalItcActuelFromNoms || 0,
+                bloques: single.stats.bloque,
+                reliquatNonRacc: single.audit?.reliquatNonRacc || 0,
+              },
+              reliquat: {
+                encours: single.stats.encours,
+                pco: single.stats.pco,
+                etude: single.stats.etude,
+                pm: single.stats.pm,
+                noBox: single.stats.noBox,
+                total: single.audit?.reliquatNonRacc || 0,
+              },
+              objectif: single.details?.objectif || {},
+              daily: single.details?.daily || {},
+              status: single.details?.status || {},
+              teams: single.details?.teams || [],
+              audit: single.audit || null,
+            };
+            renderUI(single.city, single.stats, single.audit, single.details);
+          }
+          return;
+        }
+
         // multiple cities detected: compute for each (preserve rules in computeForCity)
         const reports = {};
         mergedCities.forEach((c) => {
