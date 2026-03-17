@@ -340,6 +340,9 @@
           .trim();
       const normalizeKey = (v) => clean(v).replace(/[^A-Z0-9]/g, "");
 
+      // safe includes: always coerce to string so calling code won't fail
+      const has = (s, token) => String(s || "").includes(token);
+
       function parseDate(val) {
         if (!val) return null;
         if (val instanceof Date) {
@@ -379,16 +382,11 @@
         for (let i = 0; i < maxScan; i++) {
           const h = (rows[i] || []).map((c) => clean(c));
           const hasAbo = h.some(
-            (c) =>
-              c.includes("ABONNEMENT") ||
-              c.includes("NUMERO") ||
-              c.includes("MSISDN"),
+            (c) => has(c, "ABONNEMENT") || has(c, "NUMERO") || has(c, "MSISDN"),
           );
           const hasDate = h.some(
             (c) =>
-              c.includes("ENVOI") ||
-              c.includes("REELLE") ||
-              c.includes("PREVISIONNELLE"),
+              has(c, "ENVOI") || has(c, "REELLE") || has(c, "PREVISIONNELLE"),
           );
           if (hasAbo && hasDate) return i;
         }
@@ -936,13 +934,13 @@
 
         const canonicalCity = (value) => {
           const v = clean(value);
-          if (v.includes("ABIDJAN")) return "ABIDJAN";
-          if (v.includes("BOUAKE")) return "BOUAKE";
-          if (v.includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
-          if (v.includes("DIVO")) return "DIVO";
-          if (v.includes("GAGNOA")) return "GAGNOA";
-          if (v.includes("SANPEDRO")) return "SANPEDRO";
-          if (v.includes("KATIOLA")) return "KATIOLA";
+          if (has(v, "ABIDJAN")) return "ABIDJAN";
+          if (has(v, "BOUAKE")) return "BOUAKE";
+          if (has(v, "YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
+          if (has(v, "DIVO")) return "DIVO";
+          if (has(v, "GAGNOA")) return "GAGNOA";
+          if (has(v, "SANPEDRO")) return "SANPEDRO";
+          if (has(v, "KATIOLA")) return "KATIOLA";
           return "";
         };
 
@@ -951,12 +949,10 @@
 
         wb.SheetNames.forEach((name) => {
           let sN = clean(name);
-          if (sN.includes("TCD") || sN.includes("RECAP")) return;
+          if (has(sN, "TCD") || has(sN, "RECAP")) return;
 
-          const isMainInstance =
-            sN.includes("SUIVI") && sN.includes("INSTANCE");
-          const isMainRaccord =
-            sN.includes("SUIVI") && sN.includes("RACCORDEMENT");
+          const isMainInstance = has(sN, "SUIVI") && has(sN, "INSTANCE");
+          const isMainRaccord = has(sN, "SUIVI") && has(sN, "RACCORDEMENT");
           if (!isMainInstance && !isMainRaccord) return;
 
           const sheetCity = canonicalCity(sN);
@@ -967,34 +963,30 @@
 
           const headerRowIndex = findHeaderRow(rows);
           let h = (rows[headerRowIndex] || []).map((c) => clean(c));
-          let iVille = h.findIndex(
-            (c) => c.includes("VILLE") || c.includes("COMMU"),
-          );
-          let iEnvoi = h.findIndex((c) => c.includes("ENVOI"));
-          let iRacc = h.findIndex((c) => c.includes("REELLE"));
-          let iPrev = h.findIndex((c) => c.includes("PREVISIONNELLE"));
-          let iAvance = h.findIndex((c) => c.includes("AVANCE"));
-          let iStatut = h.findIndex((c) => c.includes("STATUT"));
-          let iEtudeTechnique = h.findIndex((c) =>
-            c.includes("ETUDETECHNIQUE"),
-          );
-          let iProbleme = h.findIndex((c) => c.includes("PROBLEME"));
-          let iEntreprise = h.findIndex((c) => c.includes("ENTREPRISE"));
-          let iNoms = h.findIndex((c) => c === "NOMS" || c.includes("NOMS"));
+          let iVille = h.findIndex((c) => has(c, "VILLE") || has(c, "COMMU"));
+          let iEnvoi = h.findIndex((c) => has(c, "ENVOI"));
+          let iRacc = h.findIndex((c) => has(c, "REELLE"));
+          let iPrev = h.findIndex((c) => has(c, "PREVISIONNELLE"));
+          let iAvance = h.findIndex((c) => has(c, "AVANCE"));
+          let iStatut = h.findIndex((c) => has(c, "STATUT"));
+          let iEtudeTechnique = h.findIndex((c) => has(c, "ETUDETECHNIQUE"));
+          let iProbleme = h.findIndex((c) => has(c, "PROBLEME"));
+          let iEntreprise = h.findIndex((c) => has(c, "ENTREPRISE"));
+          let iNoms = h.findIndex((c) => c === "NOMS" || has(c, "NOMS"));
           const idIndexes = h
             .map((c, idx) => ({ c, idx }))
             .filter(
               ({ c }) =>
-                c.includes("ABONNEMENT") ||
-                c.includes("NUMERO") ||
-                c.includes("MSISDN") ||
-                c.includes("DOSSIER") ||
-                c.includes("REFERENCE") ||
+                has(c, "ABONNEMENT") ||
+                has(c, "NUMERO") ||
+                has(c, "MSISDN") ||
+                has(c, "DOSSIER") ||
+                has(c, "REFERENCE") ||
                 c === "REF" ||
-                c.includes("CLIENT") ||
-                c.includes("CONTACT") ||
-                c.includes("TEL") ||
-                c.includes("TELEPHONE"),
+                has(c, "CLIENT") ||
+                has(c, "CONTACT") ||
+                has(c, "TEL") ||
+                has(c, "TELEPHONE"),
             )
             .map(({ idx }) => idx);
 
@@ -1039,11 +1031,10 @@
             const etudeTechniqueCol = clean(vEtudeTechnique);
             const problemeCol = clean(vProbleme);
             const sansPcoSignal = isMainInstance
-              ? etudeTechniqueCol.includes("SANSPCO") ||
-                etudeTechniqueCol.includes("SANS PCO")
+              ? has(etudeTechniqueCol, "SANSPCO") ||
+                has(etudeTechniqueCol, "SANS PCO")
               : isMainRaccord
-                ? statutCol.includes("SANSPCO") ||
-                  statutCol.includes("SANS PCO")
+                ? has(statutCol, "SANSPCO") || has(statutCol, "SANS PCO")
                 : false;
             const autreKeywords = [
               "INDISPONIBLE",
@@ -1054,16 +1045,16 @@
             const autreSignal =
               isMainInstance &&
               iProbleme >= 0 &&
-              autreKeywords.some((keyword) => problemeCol.includes(keyword));
+              autreKeywords.some((keyword) => has(problemeCol, keyword));
 
-            if (isMainInstance && iAvance >= 0 && avancement.includes("BLOQ")) {
+            if (isMainInstance && iAvance >= 0 && has(avancement, "BLOQ")) {
               bloqueFromAvancement += 1;
             }
             if (
               isMainInstance &&
               iAvance >= 0 &&
-              avancement.includes("RACCORDEMENT") &&
-              avancement.includes("ENCOURS")
+              has(avancement, "RACCORDEMENT") &&
+              has(avancement, "ENCOURS")
             ) {
               encoursFromAvancement += 1;
             }
@@ -1112,14 +1103,14 @@
         };
 
         records.forEach((rec) => {
-          if (!rec.sN.includes("INSTANCE")) return;
+          if (!has(rec.sN, "INSTANCE")) return;
           const key = rec.dossierKey || `INST-${rec.rowIndex}`;
           instanceMap.set(key, pickLatestByEnv(instanceMap.get(key), rec));
         });
 
         const raccordMap = new Map();
         records.forEach((rec) => {
-          if (!rec.sN.includes("RACCORDEMENT")) return;
+          if (!has(rec.sN, "RACCORDEMENT")) return;
           const key = rec.dossierKey || `RACC-${rec.rowIndex}`;
           if (!raccordMap.has(key)) {
             raccordMap.set(key, {
@@ -1174,7 +1165,7 @@
           inRecuWindow(rec.dEnv),
         );
         const connectedByRaccordementRows = records.filter(
-          (rec) => rec.sN.includes("RACCORDEMENT") && inRecuWindow(rec.dRac),
+          (rec) => has(rec.sN, "RACCORDEMENT") && inRecuWindow(rec.dRac),
         );
         stats.recu = receivedByEnvoiRows.length;
         stats.racc = connectedByRaccordementRows.length;
@@ -1196,32 +1187,31 @@
         stats.totalItcActuelFromNoms = totalItcActuelFromNoms;
 
         stats.pm = blockedPopulation.filter(
-          (v) => v.status.includes("PM") || v.status.includes("IMPLANT"),
+          (v) => has(v.status, "PM") || has(v.status, "IMPLANT"),
         ).length;
         stats.noBox = blockedPopulation.filter(
           (v) =>
-            v.status.includes("BOX") ||
-            v.status.includes("SANSBOX") ||
-            v.status.includes("SANSBOXHUAWEI"),
+            has(v.status, "BOX") ||
+            has(v.status, "SANSBOX") ||
+            has(v.status, "SANSBOXHUAWEI"),
         ).length;
 
         stats.etude = records.filter(
           (rec) =>
-            rec.sN.includes("INSTANCE") &&
-            String(rec.etudeTechnique || "").includes("ETUDENONREALISEE"),
+            has(rec.sN, "INSTANCE") &&
+            has(rec.etudeTechnique, "ETUDENONREALISEE"),
         ).length;
         const pcoFromProbleme = records.filter((rec) => {
-          if (!rec.sN.includes("INSTANCE")) return false;
+          if (!has(rec.sN, "INSTANCE")) return false;
           const p = String(rec.probleme || "");
           return (
-            p.includes("HORSZONECOUVERTUREPCO") ||
-            p.includes("INDISPONIBILITEDEPON")
+            has(p, "HORSZONECOUVERTUREPCO") || has(p, "INDISPONIBILITEDEPON")
           );
         }).length;
         const pcoFromAvancement = records.filter((rec) => {
-          if (!rec.sN.includes("INSTANCE")) return false;
+          if (!has(rec.sN, "INSTANCE")) return false;
           const a = String(rec.avancement || "");
-          return a.includes("DEPLOIEMENT") && a.includes("PCO");
+          return has(a, "DEPLOIEMENT") && has(a, "PCO");
         }).length;
         stats.pco = pcoFromProbleme + pcoFromAvancement;
         stats.encours = encoursFromAvancement;
@@ -1266,21 +1256,21 @@
         ).length;
         const statusDetails = {
           horsZone: receivedThisWeekEntries.filter((entry) =>
-            statusText(entry).includes("HORS ZONE"),
+            has(statusText(entry), "HORS ZONE"),
           ).length,
           sansPco: sansPcoFromReceivedWeek,
           avecPco: receivedThisWeekEntries.filter((entry) => {
             const s = statusText(entry);
             return (
-              s.includes("PCO") &&
-              !s.includes("SANS PCO") &&
-              !s.includes("SANSPCO") &&
-              !s.includes("ETUDE")
+              has(s, "PCO") &&
+              !has(s, "SANS PCO") &&
+              !has(s, "SANSPCO") &&
+              !has(s, "ETUDE")
             );
           }).length,
           autre: autreFromReceivedWeek,
           etude: receivedThisWeekEntries.filter((entry) =>
-            statusText(entry).includes("ETUDE"),
+            has(statusText(entry), "ETUDE"),
           ).length,
           raccorde: stats.racc,
           pourcentage: stats.recu > 0 ? (stats.racc / stats.recu) * 100 : 0,
@@ -1288,7 +1278,7 @@
 
         const teamMap = new Map();
         records.forEach((rec) => {
-          if (!rec.sN.includes("RACCORDEMENT") || !rec.dossierKey) return;
+          if (!has(rec.sN, "RACCORDEMENT") || !rec.dossierKey) return;
           const team = rec.entreprise || "INCONNUE";
           if (!teamMap.has(team)) {
             teamMap.set(team, { recus: new Set(), traites: new Set() });
@@ -1368,13 +1358,13 @@
         const cities = new Set();
         const canonicalCityLocal = (value) => {
           const v = clean(value);
-          if (v.includes("ABIDJAN")) return "ABIDJAN";
-          if (v.includes("BOUAKE")) return "BOUAKE";
-          if (v.includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
-          if (v.includes("DIVO")) return "DIVO";
-          if (v.includes("GAGNOA")) return "GAGNOA";
-          if (v.includes("SANPEDRO")) return "SANPEDRO";
-          if (v.includes("KATIOLA")) return "KATIOLA";
+          if (has(v, "ABIDJAN")) return "ABIDJAN";
+          if (has(v, "BOUAKE")) return "BOUAKE";
+          if (has(v, "YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
+          if (has(v, "DIVO")) return "DIVO";
+          if (has(v, "GAGNOA")) return "GAGNOA";
+          if (has(v, "SANPEDRO")) return "SANPEDRO";
+          if (has(v, "KATIOLA")) return "KATIOLA";
           return "";
         };
 
@@ -1403,13 +1393,13 @@
         const canonicalize = (v) => {
           const s = clean(String(v || ""));
           if (!s) return "";
-          if (s.includes("ABIDJAN")) return "ABIDJAN";
-          if (s.includes("BOUAKE")) return "BOUAKE";
-          if (s.includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
-          if (s.includes("DIVO")) return "DIVO";
-          if (s.includes("GAGNOA")) return "GAGNOA";
-          if (s.includes("SANPEDRO")) return "SANPEDRO";
-          if (s.includes("KATIOLA")) return "KATIOLA";
+          if (has(s, "ABIDJAN")) return "ABIDJAN";
+          if (has(s, "BOUAKE")) return "BOUAKE";
+          if (has(s, "YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
+          if (has(s, "DIVO")) return "DIVO";
+          if (has(s, "GAGNOA")) return "GAGNOA";
+          if (has(s, "SANPEDRO")) return "SANPEDRO";
+          if (has(s, "KATIOLA")) return "KATIOLA";
           // fallback to cleaned token (preserve non-canonical city names)
           return s;
         };
@@ -1419,8 +1409,7 @@
           const headerRowIndex = findHeaderRow(rows);
           const h = (rows[headerRowIndex] || []).map((c) => clean(c));
           const iVille = h.findIndex(
-            (c) =>
-              c.includes("VILLE") || c.includes("COMM") || c.includes("LOCAL"),
+            (c) => has(c, "VILLE") || has(c, "COMM") || has(c, "LOCAL"),
           );
           if (iVille >= 0) {
             for (let r = headerRowIndex + 1; r < rows.length; r++) {
