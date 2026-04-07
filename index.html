@@ -82,7 +82,7 @@
       <div class="container-fluid">
         <span class="navbar-brand">
           <img
-            src="assets/nouveau-logo-itc.png"
+            src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
             alt="ITC"
             style="height: 28px; margin-right: 8px"
           />
@@ -117,6 +117,28 @@
 
       <div id="mainDashboard" style="display: none">
         <div class="d-flex justify-content-end gap-2 mb-3">
+          <label class="small align-self-center mb-0">Date upload</label>
+          <input
+            id="uploadDateInput"
+            type="date"
+            class="form-control form-control-sm w-auto"
+            style="max-width: 140px"
+            title="Date de référence pour J (upload)"
+          />
+
+          <div class="form-check form-check-inline align-self-center ms-2">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="consolidatedToggle"
+              onchange="toggleConsolidated(this.checked)"
+            />
+            <label class="form-check-label small" for="consolidatedToggle"
+              >Considérer comme consolidé</label
+            >
+          </div>
+          <!-- mapping configuration removed -->
+
           <button
             class="btn btn-sm btn-outline-primary"
             onclick="exportExcelReport()"
@@ -331,6 +353,7 @@
       let latestAudit = null;
       let latestReport = null;
       let latestReportsAll = null; // map city -> report objects
+      let treatConsolidated = false; // if true, aggregate all sheets into one report
       const clean = (s) =>
         String(s || "")
           .normalize("NFD")
@@ -340,8 +363,44 @@
           .trim();
       const normalizeKey = (v) => clean(v).replace(/[^A-Z0-9]/g, "");
 
-      // safe includes: always coerce to string so calling code won't fail
-      const has = (s, token) => String(s || "").includes(token);
+      function normalizeCityToken(value, allowFallback = false) {
+        const v = clean(value);
+        if (!v) return "";
+        if (v.includes("ABIDJAN")) return "ABIDJAN";
+        if (v.includes("BOUAKE")) return "BOUAKE";
+        if (v.includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
+        if (v.includes("DIVO")) return "DIVO";
+        if (v.includes("GAGNOA")) return "GAGNOA";
+        if (v.includes("SANPEDRO")) return "SANPEDRO";
+        if (v.includes("KATIOLA")) return "KATIOLA";
+        return allowFallback ? v : "";
+      }
+
+      function getCityColumnIndex(headers) {
+        const iVille = headers.findIndex((c) => (c || "") === "VILLE");
+        if (iVille >= 0) return iVille;
+        const iVilleContains = headers.findIndex((c) =>
+          (c || "").includes("VILLE"),
+        );
+        if (iVilleContains >= 0) return iVilleContains;
+        const iCommune = headers.findIndex((c) => (c || "").includes("COMMU"));
+        if (iCommune >= 0) return iCommune;
+        return headers.findIndex((c) => (c || "").includes("LOCAL"));
+      }
+
+      // Normalize identifier cell values for dossierKey generation
+      function normalizeIdValue(v) {
+        if (v == null) return "";
+        let s = String(v || "")
+          .normalize("NFD")
+          .replace(/[^A-Za-z0-9]/g, "")
+          .toUpperCase();
+        s = s.replace(/^REF|^DOSSIER|^D#|^ID\W*/i, "");
+        s = s.replace(/^0+/, "");
+        // If purely numeric and too long (phone numbers), keep last 8 digits
+        if (/^\d+$/.test(s) && s.length > 8) s = s.slice(-8);
+        return s;
+      }
 
       function parseDate(val) {
         if (!val) return null;
@@ -351,7 +410,23 @@
           return d;
         }
         if (!isNaN(val) && typeof val === "number") {
-          const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+          try {
+            if (
+              typeof XLSX !== "undefined" &&
+              XLSX.SSF &&
+              typeof XLSX.SSF.parse_date_code === "function"
+            ) {
+              const pd = XLSX.SSF.parse_date_code(val);
+              if (pd && pd.y) {
+                const d = new Date(pd.y, pd.m - 1, pd.d);
+                d.setHours(0, 0, 0, 0);
+                return d;
+              }
+            }
+          } catch (e) {
+            // fallback
+          }
+          const d = new Date((val - 25569) * 86400 * 1000);
           d.setHours(0, 0, 0, 0);
           return d;
         }
@@ -378,17 +453,38 @@
       }
 
       function findHeaderRow(rows) {
-        const maxScan = Math.min(rows.length, 15);
+        const maxScan = Math.min(rows.length, 50);
         for (let i = 0; i < maxScan; i++) {
           const h = (rows[i] || []).map((c) => clean(c));
           const hasAbo = h.some(
-            (c) => has(c, "ABONNEMENT") || has(c, "NUMERO") || has(c, "MSISDN"),
+            (c) =>
+              c.includes("ABONNEMENT") ||
+              c.includes("NUMERO") ||
+              c.includes("MSISDN") ||
+              c.includes("REF") ||
+              c.includes("DOSSIER") ||
+              c.includes("CLIENT") ||
+              c.includes("TEL") ||
+              c.includes("TELEPHONE"),
           );
           const hasDate = h.some(
             (c) =>
-              has(c, "ENVOI") || has(c, "REELLE") || has(c, "PREVISIONNELLE"),
+              c.includes("ENVOI") ||
+              c.includes("REELLE") ||
+              c.includes("PREVISIONNELLE") ||
+              c.includes("RACCORDEMENT") ||
+              c.includes("DATE"),
           );
           if (hasAbo && hasDate) return i;
+        }
+        // fallback: first non-empty row
+        for (let i = 0; i < Math.min(rows.length, 8); i++) {
+          if (
+            (rows[i] || []).some(
+              (c) => c != null && String(c).trim().length > 0,
+            )
+          )
+            return i;
         }
         return 0;
       }
@@ -915,7 +1011,7 @@
         pptx.writeFile({ fileName: getReportFilename("pptx") });
       }
 
-      function computeForCity(wb, targetCity) {
+      function computeForCity(wb, targetCity, consolidated = false) {
         let detectedCity = "VILLE INCONNUE";
         let stats = {
           report: 0,
@@ -932,164 +1028,244 @@
         let totalItcActuelFromNoms = 0;
         let encoursFromAvancement = 0;
 
-        const canonicalCity = (value) => {
-          const v = clean(value);
-          if (has(v, "ABIDJAN")) return "ABIDJAN";
-          if (has(v, "BOUAKE")) return "BOUAKE";
-          if (has(v, "YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
-          if (has(v, "DIVO")) return "DIVO";
-          if (has(v, "GAGNOA")) return "GAGNOA";
-          if (has(v, "SANPEDRO")) return "SANPEDRO";
-          if (has(v, "KATIOLA")) return "KATIOLA";
-          return "";
-        };
-
         const records = [];
-        let selectedCity = targetCity || "";
+        let selectedCity = normalizeCityToken(targetCity, true) || "";
 
-        wb.SheetNames.forEach((name) => {
-          let sN = clean(name);
-          if (has(sN, "TCD") || has(sN, "RECAP")) return;
-
-          const isMainInstance = has(sN, "SUIVI") && has(sN, "INSTANCE");
-          const isMainRaccord = has(sN, "SUIVI") && has(sN, "RACCORDEMENT");
-          if (!isMainInstance && !isMainRaccord) return;
-
-          const sheetCity = canonicalCity(sN);
-          if (!selectedCity && sheetCity) selectedCity = sheetCity;
-
-          let rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
-          if (rows.length < 2) return;
-
-          const headerRowIndex = findHeaderRow(rows);
-          let h = (rows[headerRowIndex] || []).map((c) => clean(c));
-          let iVille = h.findIndex((c) => has(c, "VILLE") || has(c, "COMMU"));
-          let iEnvoi = h.findIndex((c) => has(c, "ENVOI"));
-          let iRacc = h.findIndex((c) => has(c, "REELLE"));
-          let iPrev = h.findIndex((c) => has(c, "PREVISIONNELLE"));
-          let iAvance = h.findIndex((c) => has(c, "AVANCE"));
-          let iStatut = h.findIndex((c) => has(c, "STATUT"));
-          let iEtudeTechnique = h.findIndex((c) => has(c, "ETUDETECHNIQUE"));
-          let iProbleme = h.findIndex((c) => has(c, "PROBLEME"));
-          let iEntreprise = h.findIndex((c) => has(c, "ENTREPRISE"));
-          let iNoms = h.findIndex((c) => c === "NOMS" || has(c, "NOMS"));
-          const idIndexes = h
-            .map((c, idx) => ({ c, idx }))
-            .filter(
-              ({ c }) =>
-                has(c, "ABONNEMENT") ||
-                has(c, "NUMERO") ||
-                has(c, "MSISDN") ||
-                has(c, "DOSSIER") ||
-                has(c, "REFERENCE") ||
-                c === "REF" ||
-                has(c, "CLIENT") ||
-                has(c, "CONTACT") ||
-                has(c, "TEL") ||
-                has(c, "TELEPHONE"),
-            )
-            .map(({ idx }) => idx);
-
-          const cellAt = (row, idx) => (idx >= 0 ? row[idx] : null);
-
-          for (let i = headerRowIndex + 1; i < rows.length; i++) {
-            let r = rows[i];
-            const rowCity = iVille >= 0 ? clean(r[iVille]) : "";
-            const rowCityCanonical = canonicalCity(rowCity);
-            if (!selectedCity && rowCityCanonical)
-              selectedCity = rowCityCanonical;
-            if (
-              selectedCity &&
-              rowCityCanonical &&
-              rowCityCanonical !== selectedCity
-            )
-              continue;
-            if (selectedCity && sheetCity && sheetCity !== selectedCity)
+        for (const name of wb.SheetNames) {
+          try {
+            let sN = clean(name);
+            if ((sN || "").includes("TCD") || (sN || "").includes("RECAP"))
               continue;
 
-            const dossierKey = idIndexes
-              .map((idx) => normalizeKey(cellAt(r, idx)))
-              .filter(Boolean)
-              .join("|");
-            const hasAboValue = dossierKey.length > 0;
-            const vEnvoi = cellAt(r, iEnvoi);
-            const vRacc = cellAt(r, iRacc);
-            const vPrev = cellAt(r, iPrev);
-            const vAvance = cellAt(r, iAvance);
-            const vStatut = cellAt(r, iStatut);
-            const vEtudeTechnique = cellAt(r, iEtudeTechnique);
-            const vProbleme = cellAt(r, iProbleme);
-            const vEntreprise = cellAt(r, iEntreprise);
-            const vNoms = cellAt(r, iNoms);
+            const isMainInstance =
+              (sN || "").includes("SUIVI") && (sN || "").includes("INSTANCE");
+            const isMainRaccord =
+              (sN || "").includes("SUIVI") &&
+              (sN || "").includes("RACCORDEMENT");
+            if (!isMainInstance && !isMainRaccord) continue;
 
-            const dEnv = parseDate(vEnvoi);
-            const dRac = parseDate(vRacc);
-            const dPrev = parseDate(vPrev);
-            const status = clean(vAvance || vStatut);
-            const avancement = clean(vAvance);
-            const statutCol = clean(vStatut);
-            const etudeTechniqueCol = clean(vEtudeTechnique);
-            const problemeCol = clean(vProbleme);
-            const sansPcoSignal = isMainInstance
-              ? has(etudeTechniqueCol, "SANSPCO") ||
-                has(etudeTechniqueCol, "SANS PCO")
-              : isMainRaccord
-                ? has(statutCol, "SANSPCO") || has(statutCol, "SANS PCO")
-                : false;
-            const autreKeywords = [
-              "INDISPONIBLE",
-              "INJOIGNABLE",
-              "DESISTEMENT",
-              "NUMEROINCORRECT",
-            ];
-            const autreSignal =
-              isMainInstance &&
-              iProbleme >= 0 &&
-              autreKeywords.some((keyword) => has(problemeCol, keyword));
+            const sheetCity = normalizeCityToken(sN, false);
+            if (!selectedCity && sheetCity) selectedCity = sheetCity;
 
-            if (isMainInstance && iAvance >= 0 && has(avancement, "BLOQ")) {
-              bloqueFromAvancement += 1;
+            let rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
+            if (rows.length < 2) continue;
+
+            const headerRowIndex = findHeaderRow(rows);
+            let h = (rows[headerRowIndex] || []).map((c) => clean(c));
+
+            const mappedIndex = (field, heur) => heur(h);
+
+            let iVille = mappedIndex("ville", (h) => getCityColumnIndex(h));
+            let iEnvoi = mappedIndex("envoi", (h) =>
+              h.findIndex(
+                (c) =>
+                  (c || "").includes("ENVOI") ||
+                  (c || "").includes("ENVOIE") ||
+                  (c || "").includes("DATE"),
+              ),
+            );
+            let iRacc = mappedIndex("racc", (h) =>
+              h.findIndex(
+                (c) =>
+                  (c || "").includes("REELLE") ||
+                  (c || "").includes("RACCORDEMENT") ||
+                  (c || "").includes("RAC"),
+              ),
+            );
+            let iPrev = mappedIndex("prev", (h) =>
+              h.findIndex(
+                (c) =>
+                  (c || "").includes("PREVISIONNELLE") ||
+                  (c || "").includes("PREVISION"),
+              ),
+            );
+            let iAvance = mappedIndex("avance", (h) =>
+              h.findIndex(
+                (c) =>
+                  (c || "").includes("AVANCE") ||
+                  (c || "").includes("AVANCEMENT") ||
+                  (c || "").includes("STATUS"),
+              ),
+            );
+            let iStatut = mappedIndex("statut", (h) =>
+              h.findIndex(
+                (c) =>
+                  (c || "").includes("STATUT") || (c || "").includes("STATUS"),
+              ),
+            );
+            let iEtudeTechnique = mappedIndex("etudeTechnique", (h) =>
+              h.findIndex(
+                (c) =>
+                  (c || "").includes("ETUDE") ||
+                  (c || "").includes("ETUDETECHNIQUE"),
+              ),
+            );
+            let iProbleme = mappedIndex("probleme", (h) =>
+              h.findIndex(
+                (c) =>
+                  (c || "").includes("PROBLEME") || (c || "").includes("PROBL"),
+              ),
+            );
+            let iEntreprise = mappedIndex("entreprise", (h) =>
+              h.findIndex(
+                (c) =>
+                  (c || "").includes("ENTREPRISE") ||
+                  (c || "").includes("SOCIETE") ||
+                  (c || "").includes("PRESTATAIRE"),
+              ),
+            );
+            let iNoms = mappedIndex("noms", (h) =>
+              h.findIndex(
+                (c) =>
+                  c === "NOMS" ||
+                  (c || "").includes("NOMS") ||
+                  (c || "").includes("NOM"),
+              ),
+            );
+            const idIndexes = (function (h) {
+              const candidates = h
+                .map((c, idx) => ({ c, idx }))
+                .filter(
+                  ({ c }) =>
+                    c.includes("ABONNEMENT") ||
+                    c.includes("NUMERO") ||
+                    c.includes("MSISDN") ||
+                    c.includes("DOSSIER") ||
+                    c.includes("REFERENCE") ||
+                    c === "REF" ||
+                    c.includes("CLIENT") ||
+                    c.includes("CONTACT") ||
+                    c.includes("TEL") ||
+                    c.includes("TELEPHONE"),
+                )
+                .map(({ idx }) => idx);
+              // If user mapped an explicit id column, prefer it
+              // no user-provided column mapping: use detected candidates
+              return candidates;
+            })(h);
+
+            const cellAt = (row, idx) => (idx >= 0 ? row[idx] : null);
+
+            for (let i = headerRowIndex + 1; i < rows.length; i++) {
+              let r = rows[i];
+              if (!Array.isArray(r)) continue;
+              const rowCity = iVille >= 0 ? clean(r[iVille]) : "";
+              const rowCityCanonical = normalizeCityToken(rowCity, true);
+              if (!selectedCity && rowCityCanonical)
+                selectedCity = rowCityCanonical;
+              if (!consolidated) {
+                if (
+                  selectedCity &&
+                  rowCityCanonical &&
+                  rowCityCanonical !== selectedCity
+                )
+                  continue;
+                if (selectedCity && sheetCity && sheetCity !== selectedCity)
+                  continue;
+              }
+
+              const dossierKey = idIndexes
+                .map((idx) => normalizeIdValue(cellAt(r, idx)))
+                .filter(Boolean)
+                .join("|");
+              const hasAboValue = dossierKey.length > 0;
+              const vEnvoi = cellAt(r, iEnvoi);
+              const vRacc = cellAt(r, iRacc);
+              const vPrev = cellAt(r, iPrev);
+              const vAvance = cellAt(r, iAvance);
+              const vStatut = cellAt(r, iStatut);
+              const vEtudeTechnique = cellAt(r, iEtudeTechnique);
+              const vProbleme = cellAt(r, iProbleme);
+              const vEntreprise = cellAt(r, iEntreprise);
+              const vNoms = cellAt(r, iNoms);
+
+              const dEnv = parseDate(vEnvoi);
+              const dRac = parseDate(vRacc);
+              const dPrev = parseDate(vPrev);
+              const status = clean(vAvance || vStatut);
+              const avancement = clean(vAvance);
+              const statutCol = clean(vStatut);
+              const etudeTechniqueCol = clean(vEtudeTechnique);
+              const problemeCol = clean(vProbleme);
+              const sansPcoSignal = isMainInstance
+                ? (etudeTechniqueCol || "").includes("SANSPCO") ||
+                  (etudeTechniqueCol || "").includes("SANS PCO")
+                : isMainRaccord
+                  ? (statutCol || "").includes("SANSPCO") ||
+                    (statutCol || "").includes("SANS PCO")
+                  : false;
+              const autreKeywords = [
+                "INDISPONIBLE",
+                "INJOIGNABLE",
+                "DESISTEMENT",
+                "NUMEROINCORRECT",
+              ];
+              const autreSignal =
+                isMainInstance &&
+                iProbleme >= 0 &&
+                autreKeywords.some((keyword) =>
+                  (problemeCol || "").includes(keyword),
+                );
+
+              if (
+                isMainInstance &&
+                iAvance >= 0 &&
+                (avancement || "").includes("BLOQ")
+              ) {
+                bloqueFromAvancement += 1;
+              }
+              if (
+                isMainInstance &&
+                iAvance >= 0 &&
+                (avancement || "").includes("RACCORDEMENT") &&
+                (avancement || "").includes("ENCOURS")
+              ) {
+                encoursFromAvancement += 1;
+              }
+              if (isMainInstance && iNoms >= 0 && clean(vNoms).length > 0) {
+                totalItcActuelFromNoms += 1;
+              }
+
+              const hasUsefulData =
+                !!dEnv || !!dRac || !!dPrev || !!status || hasAboValue;
+              if (!hasUsefulData) continue;
+
+              if (detectedCity === "VILLE INCONNUE") {
+                const cityFromRow = rowCityCanonical;
+                const cityFromSheet = sheetCity;
+                if (cityFromRow) detectedCity = cityFromRow;
+                else if (cityFromSheet) detectedCity = cityFromSheet;
+              }
+
+              records.push({
+                sN,
+                dossierKey,
+                dEnv,
+                dRac,
+                dPrev,
+                status,
+                avancement,
+                etudeTechnique: etudeTechniqueCol,
+                probleme: problemeCol,
+                sansPcoSignal,
+                autreSignal,
+                entreprise: clean(vEntreprise),
+                rowIndex: i,
+              });
             }
-            if (
-              isMainInstance &&
-              iAvance >= 0 &&
-              has(avancement, "RACCORDEMENT") &&
-              has(avancement, "ENCOURS")
-            ) {
-              encoursFromAvancement += 1;
-            }
-            if (isMainInstance && iNoms >= 0 && clean(vNoms).length > 0) {
-              totalItcActuelFromNoms += 1;
-            }
-
-            const hasUsefulData =
-              !!dEnv || !!dRac || !!dPrev || !!status || hasAboValue;
-            if (!hasUsefulData) continue;
-
-            if (detectedCity === "VILLE INCONNUE") {
-              const cityFromRow = rowCityCanonical;
-              const cityFromSheet = sheetCity;
-              if (cityFromRow) detectedCity = cityFromRow;
-              else if (cityFromSheet) detectedCity = cityFromSheet;
-            }
-
-            records.push({
-              sN,
-              dossierKey,
-              dEnv,
-              dRac,
-              dPrev,
-              status,
-              avancement,
-              etudeTechnique: etudeTechniqueCol,
-              probleme: problemeCol,
-              sansPcoSignal,
-              autreSignal,
-              entreprise: clean(vEntreprise),
-              rowIndex: i,
-            });
+          } catch (e) {
+            console.error("Error processing sheet", name, e);
+            try {
+              alert(
+                "Erreur lors du traitement de la feuille " +
+                  name +
+                  ": " +
+                  (e && e.message ? e.message : e),
+              );
+            } catch (_) {}
+            continue;
           }
-        });
+        }
 
         const instanceMap = new Map();
         const pickLatestByEnv = (current, incoming) => {
@@ -1103,14 +1279,14 @@
         };
 
         records.forEach((rec) => {
-          if (!has(rec.sN, "INSTANCE")) return;
+          if (!(rec.sN || "").includes("INSTANCE")) return;
           const key = rec.dossierKey || `INST-${rec.rowIndex}`;
           instanceMap.set(key, pickLatestByEnv(instanceMap.get(key), rec));
         });
 
         const raccordMap = new Map();
         records.forEach((rec) => {
-          if (!has(rec.sN, "RACCORDEMENT")) return;
+          if (!(rec.sN || "").includes("RACCORDEMENT")) return;
           const key = rec.dossierKey || `RACC-${rec.rowIndex}`;
           if (!raccordMap.has(key)) {
             raccordMap.set(key, {
@@ -1139,7 +1315,13 @@
           if (rec.status) agg.statuses.add(rec.status);
         });
 
-        const recuWindowEnd = new Date();
+        // Allow user to override upload date (date J) via UI control
+        let recuWindowEnd = new Date();
+        const uploadDateStr = document.getElementById("uploadDateInput")?.value;
+        if (uploadDateStr) {
+          const parsed = parseDate(uploadDateStr);
+          if (parsed) recuWindowEnd = parsed;
+        }
         recuWindowEnd.setHours(0, 0, 0, 0);
         const recuWindowStart = new Date(recuWindowEnd);
         recuWindowStart.setDate(recuWindowEnd.getDate() - 7);
@@ -1165,7 +1347,8 @@
           inRecuWindow(rec.dEnv),
         );
         const connectedByRaccordementRows = records.filter(
-          (rec) => has(rec.sN, "RACCORDEMENT") && inRecuWindow(rec.dRac),
+          (rec) =>
+            (rec.sN || "").includes("RACCORDEMENT") && inRecuWindow(rec.dRac),
         );
         stats.recu = receivedByEnvoiRows.length;
         stats.racc = connectedByRaccordementRows.length;
@@ -1187,33 +1370,29 @@
         stats.totalItcActuelFromNoms = totalItcActuelFromNoms;
 
         stats.pm = blockedPopulation.filter(
-          (v) => has(v.status, "PM") || has(v.status, "IMPLANT"),
+          (v) =>
+            (v.status || "").includes("PM") ||
+            (v.status || "").includes("IMPLANT"),
         ).length;
         stats.noBox = blockedPopulation.filter(
           (v) =>
-            has(v.status, "BOX") ||
-            has(v.status, "SANSBOX") ||
-            has(v.status, "SANSBOXHUAWEI"),
+            (v.status || "").includes("BOX") ||
+            (v.status || "").includes("SANSBOX") ||
+            (v.status || "").includes("SANSBOXHUAWEI"),
         ).length;
 
-        stats.etude = records.filter(
-          (rec) =>
-            has(rec.sN, "INSTANCE") &&
-            has(rec.etudeTechnique, "ETUDENONREALISEE"),
-        ).length;
-        const pcoFromProbleme = records.filter((rec) => {
-          if (!has(rec.sN, "INSTANCE")) return false;
-          const p = String(rec.probleme || "");
-          return (
-            has(p, "HORSZONECOUVERTUREPCO") || has(p, "INDISPONIBILITEDEPON")
-          );
-        }).length;
-        const pcoFromAvancement = records.filter((rec) => {
-          if (!has(rec.sN, "INSTANCE")) return false;
+        const instanceRows = records.filter((rec) =>
+          (rec.sN || "").includes("INSTANCE"),
+        );
+        // Requested rule: rely on Avancement column from SUIVI INSTANCE
+        stats.etude = instanceRows.filter((rec) => {
           const a = String(rec.avancement || "");
-          return has(a, "DEPLOIEMENT") && has(a, "PCO");
+          return a.includes("ETUDEENCOURS") || a.includes("ETUDESENCOURS");
         }).length;
-        stats.pco = pcoFromProbleme + pcoFromAvancement;
+        stats.pco = instanceRows.filter((rec) => {
+          const a = String(rec.avancement || "");
+          return a.includes("DEPLOIEMENT") && a.includes("PCO");
+        }).length;
         stats.encours = encoursFromAvancement;
         stats.reliquatNonRaccFromColumns =
           stats.encours + stats.pco + stats.etude + stats.pm + stats.noBox;
@@ -1256,21 +1435,21 @@
         ).length;
         const statusDetails = {
           horsZone: receivedThisWeekEntries.filter((entry) =>
-            has(statusText(entry), "HORS ZONE"),
+            statusText(entry).includes("HORS ZONE"),
           ).length,
           sansPco: sansPcoFromReceivedWeek,
           avecPco: receivedThisWeekEntries.filter((entry) => {
             const s = statusText(entry);
             return (
-              has(s, "PCO") &&
-              !has(s, "SANS PCO") &&
-              !has(s, "SANSPCO") &&
-              !has(s, "ETUDE")
+              s.includes("PCO") &&
+              !s.includes("SANS PCO") &&
+              !s.includes("SANSPCO") &&
+              !s.includes("ETUDE")
             );
           }).length,
           autre: autreFromReceivedWeek,
           etude: receivedThisWeekEntries.filter((entry) =>
-            has(statusText(entry), "ETUDE"),
+            statusText(entry).includes("ETUDE"),
           ).length,
           raccorde: stats.racc,
           pourcentage: stats.recu > 0 ? (stats.racc / stats.recu) * 100 : 0,
@@ -1278,7 +1457,7 @@
 
         const teamMap = new Map();
         records.forEach((rec) => {
-          if (!has(rec.sN, "RACCORDEMENT") || !rec.dossierKey) return;
+          if (!rec.sN.includes("RACCORDEMENT") || !rec.dossierKey) return;
           const team = rec.entreprise || "INCONNUE";
           if (!teamMap.has(team)) {
             teamMap.set(team, { recus: new Set(), traites: new Set() });
@@ -1356,30 +1535,30 @@
 
       function detectCities(wb) {
         const cities = new Set();
-        const canonicalCityLocal = (value) => {
-          const v = clean(value);
-          if (has(v, "ABIDJAN")) return "ABIDJAN";
-          if (has(v, "BOUAKE")) return "BOUAKE";
-          if (has(v, "YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
-          if (has(v, "DIVO")) return "DIVO";
-          if (has(v, "GAGNOA")) return "GAGNOA";
-          if (has(v, "SANPEDRO")) return "SANPEDRO";
-          if (has(v, "KATIOLA")) return "KATIOLA";
-          return "";
+        const isTrackingSheet = (sheetName) => {
+          const s = clean(sheetName);
+          const hasSuivi = (s || "").includes("SUIVI");
+          const hasInstance = (s || "").includes("INSTANCE");
+          const hasRaccord = (s || "").includes("RACCORDEMENT");
+          return hasSuivi && (hasInstance || hasRaccord);
         };
-
         wb.SheetNames.forEach((name) => {
           const sN = clean(name);
-          const fromName = canonicalCityLocal(sN);
+          if (!isTrackingSheet(sN)) return;
+          const fromName = normalizeCityToken(sN, false);
           if (fromName) cities.add(fromName);
-          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
-          const maxScan = Math.min(rows.length, 50);
-          for (let i = 0; i < maxScan; i++) {
-            const row = rows[i] || [];
-            for (const cell of row) {
-              const c = canonicalCityLocal(cell);
-              if (c) cities.add(c);
-            }
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {
+            header: 1,
+          });
+          if (!rows || rows.length < 2) return;
+          const headerRowIndex = findHeaderRow(rows);
+          const h = (rows[headerRowIndex] || []).map((c) => clean(c));
+          const iVille = getCityColumnIndex(h);
+          if (iVille < 0) return;
+          for (let r = headerRowIndex + 1; r < rows.length; r++) {
+            const cell = rows[r] && rows[r][iVille];
+            const c = normalizeCityToken(cell, true);
+            if (c) cities.add(c);
           }
         });
         return Array.from(cities);
@@ -1388,42 +1567,89 @@
       function processCityData(wb) {
         // detect cities in workbook (by sheet name / scanned cells)
         const found = detectCities(wb);
+        const isTrackingSheet = (sheetName) => {
+          const s = clean(sheetName);
+          const hasSuivi = (s || "").includes("SUIVI");
+          const hasInstance = (s || "").includes("INSTANCE");
+          const hasRaccord = (s || "").includes("RACCORDEMENT");
+          return hasSuivi && (hasInstance || hasRaccord);
+        };
         // also collect cities explicitly present in a 'Ville' column across sheets
         const citiesFromColumn = new Set();
-        const canonicalize = (v) => {
-          const s = clean(String(v || ""));
-          if (!s) return "";
-          if (has(s, "ABIDJAN")) return "ABIDJAN";
-          if (has(s, "BOUAKE")) return "BOUAKE";
-          if (has(s, "YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
-          if (has(s, "DIVO")) return "DIVO";
-          if (has(s, "GAGNOA")) return "GAGNOA";
-          if (has(s, "SANPEDRO")) return "SANPEDRO";
-          if (has(s, "KATIOLA")) return "KATIOLA";
-          // fallback to cleaned token (preserve non-canonical city names)
-          return s;
-        };
         wb.SheetNames.forEach((name) => {
-          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
+          if (!isTrackingSheet(name)) return;
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {
+            header: 1,
+          });
           if (!rows || rows.length < 2) return;
           const headerRowIndex = findHeaderRow(rows);
           const h = (rows[headerRowIndex] || []).map((c) => clean(c));
-          const iVille = h.findIndex(
-            (c) => has(c, "VILLE") || has(c, "COMM") || has(c, "LOCAL"),
-          );
+          const iVille = getCityColumnIndex(h);
           if (iVille >= 0) {
             for (let r = headerRowIndex + 1; r < rows.length; r++) {
               const cell = rows[r] && rows[r][iVille];
               if (cell == null) continue;
-              const can = canonicalize(cell);
+              const can = normalizeCityToken(cell, true);
               if (can) citiesFromColumn.add(can);
             }
           }
         });
-        // merge detected cities and cities from 'Ville' columns
-        const mergedCities = Array.from(
-          new Set([...(found || []), ...Array.from(citiesFromColumn)]),
-        );
+        // Prefer explicit city column detection; fallback to generic detection
+        const mergedCities =
+          citiesFromColumn.size > 0
+            ? Array.from(citiesFromColumn)
+            : Array.from(new Set([...(found || [])]));
+
+        // If user requested consolidated aggregation, compute a single consolidated report
+        if (treatConsolidated) {
+          const consolidated = computeForCity(wb, "", true);
+          if (consolidated) {
+            const cityLabel = "CONSOLIDE";
+            latestReportsAll = { [cityLabel]: consolidated };
+            latestAudit = consolidated.audit || null;
+            latestReport = {
+              city: cityLabel,
+              weekStart: consolidated.audit?.weekStart || null,
+              weekEnd: consolidated.audit?.weekEnd || null,
+              kpi: {
+                report: consolidated.stats.report,
+                recu: consolidated.stats.recu,
+                totalItcSemaine:
+                  (consolidated.stats.report || 0) +
+                  (consolidated.stats.recu || 0),
+                raccordes: consolidated.stats.racc,
+                totalItcActuel: consolidated.audit?.totalItcActuelFromNoms || 0,
+                bloques: consolidated.stats.bloque,
+                reliquatNonRacc: consolidated.audit?.reliquatNonRacc || 0,
+              },
+              reliquat: {
+                encours: consolidated.stats.encours,
+                pco: consolidated.stats.pco,
+                etude: consolidated.stats.etude,
+                pm: consolidated.stats.pm,
+                noBox: consolidated.stats.noBox,
+                total: consolidated.audit?.reliquatNonRacc || 0,
+              },
+              objectif: consolidated.details?.objectif || {},
+              daily: consolidated.details?.daily || {},
+              status: consolidated.details?.status || {},
+              teams: consolidated.details?.teams || [],
+              audit: consolidated.audit || null,
+            };
+            // hide multi-city controls
+            const sel = document.getElementById("citySelect");
+            if (sel) sel.style.display = "none";
+            const exportAllBtn = document.getElementById("exportAllBtn");
+            if (exportAllBtn) exportAllBtn.style.display = "none";
+            renderUI(
+              cityLabel,
+              consolidated.stats,
+              consolidated.audit,
+              consolidated.details,
+            );
+          }
+          return;
+        }
 
         if (!mergedCities || mergedCities.length === 0) {
           // fallback: compute as before (single city auto-detect)
@@ -1463,6 +1689,15 @@
           }
           return;
         }
+
+        // Set default value of uploadDateInput to today if empty
+        try {
+          const up = document.getElementById("uploadDateInput");
+          if (up && !up.value) {
+            const t = new Date();
+            up.value = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+          }
+        } catch (e) {}
 
         // If we detected exactly one city from mergedCities, treat it like a single-city upload
         if (mergedCities.length === 1) {
@@ -1823,6 +2058,13 @@
           },
         });
       }
+
+      // Consolidated toggle (mapping removed)
+      function toggleConsolidated(val) {
+        treatConsolidated = !!val;
+      }
+      window.toggleConsolidated = toggleConsolidated;
     </script>
+    <!-- mapping configuration removed -->
   </body>
 </html>
