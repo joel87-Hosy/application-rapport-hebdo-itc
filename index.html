@@ -87,7 +87,7 @@
   <body>
     <div id="loader" class="loader-overlay">
       <div class="spinner-border text-primary" role="status"></div>
-      <h5 class="mt-3">Analyse du canevas en cours...</h5>
+      <h5 id="loaderText" class="mt-3">Analyse du canevas en cours...</h5>
     </div>
 
     <nav class="navbar navbar-dark p-2 shadow-sm">
@@ -362,6 +362,7 @@
       let latestReport = null;
       let latestReportsAll = null; // map city -> report objects
       let treatConsolidated = false; // if true, aggregate all sheets into one report
+      let workbookWorker = null;
       const clean = (s) =>
         String(s || "")
           .normalize("NFD")
@@ -370,6 +371,251 @@
           .replace(/\s+/g, "")
           .trim();
       const normalizeKey = (v) => clean(v).replace(/[^A-Z0-9]/g, "");
+      const yieldToUI = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+      function setLoaderMessage(message) {
+        const label = document.getElementById("loaderText");
+        if (label) label.innerText = message;
+      }
+
+      function getWorkbookWorker() {
+        if (workbookWorker) return workbookWorker;
+
+        const workerSource = `
+          self.importScripts("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
+          const clean = (s) =>
+            String(s || "")
+              .normalize("NFD")
+              .replace(/[\\u0300-\\u036f]/g, "")
+              .toUpperCase()
+              .replace(/\\s+/g, "")
+              .trim();
+
+          function findHeaderRow(rows) {
+            const maxScan = Math.min(rows.length, 50);
+            for (let i = 0; i < maxScan; i++) {
+              const h = (rows[i] || []).map((c) => clean(c));
+              const hasAbo = h.some(
+                (c) =>
+                  c.includes("ABONNEMENT") ||
+                  c.includes("NUMERO") ||
+                  c.includes("MSISDN") ||
+                  c.includes("REF") ||
+                  c.includes("DOSSIER") ||
+                  c.includes("CLIENT") ||
+                  c.includes("TEL") ||
+                  c.includes("TELEPHONE"),
+              );
+              const hasDate = h.some(
+                (c) =>
+                  c.includes("ENVOI") ||
+                  c.includes("REELLE") ||
+                  c.includes("PREVISIONNELLE") ||
+                  c.includes("RACCORDEMENT") ||
+                  c.includes("DATE"),
+              );
+              if (hasAbo && hasDate) return i;
+            }
+            for (let i = 0; i < Math.min(rows.length, 8); i++) {
+              if ((rows[i] || []).some((c) => c != null && String(c).trim().length > 0)) return i;
+            }
+            return 0;
+          }
+
+          self.onmessage = (event) => {
+            const { type, buffer } = event.data || {};
+            if (type !== "parseWorkbook") return;
+
+            try {
+              const wb = XLSX.read(buffer, { type: "array", cellDates: true, dense: true });
+              const sheets = [];
+
+              wb.SheetNames.forEach((name) => {
+                const sN = clean(name);
+                if (sN.includes("TCD") || sN.includes("RECAP")) return;
+
+                const isMainInstance = sN.includes("SUIVI") && sN.includes("INSTANCE");
+                const isMainRaccord = sN.includes("SUIVI") && sN.includes("RACCORDEMENT");
+                if (!isMainInstance && !isMainRaccord) return;
+
+                const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true });
+                if (!rows || rows.length < 2) return;
+
+                const headerRowIndex = findHeaderRow(rows);
+                const headers = (rows[headerRowIndex] || []).map((c) => clean(c));
+                sheets.push({
+                  name,
+                  sN,
+                  isMainInstance,
+                  isMainRaccord,
+                  rows,
+                  headerRowIndex,
+                  headers,
+                });
+              });
+
+              self.postMessage({ type: "parsedWorkbook", preparedSheets: sheets });
+            } catch (error) {
+              self.postMessage({
+                type: "parseError",
+                message: error?.message || String(error),
+              });
+            }
+          };
+        `;
+
+        const blob = new Blob([workerSource], {
+          type: "application/javascript",
+        });
+        workbookWorker = new Worker(URL.createObjectURL(blob));
+        return workbookWorker;
+      }
+
+      function parseWorkbookInWorker(arrayBuffer) {
+        return new Promise((resolve, reject) => {
+          if (typeof Worker === "undefined") {
+            reject(new Error("Worker non supporté"));
+            return;
+          }
+
+          const worker = getWorkbookWorker();
+          const onMessage = (event) => {
+            const data = event.data || {};
+            if (data.type === "parsedWorkbook") {
+              cleanup();
+              resolve(data.preparedSheets || []);
+            } else if (data.type === "parseError") {
+              cleanup();
+              reject(new Error(data.message || "Erreur de lecture Excel"));
+            }
+          };
+          const onError = (error) => {
+            cleanup();
+            reject(error);
+          };
+          const cleanup = () => {
+            worker.removeEventListener("message", onMessage);
+            worker.removeEventListener("error", onError);
+          };
+
+          worker.addEventListener("message", onMessage);
+          worker.addEventListener("error", onError);
+          worker.postMessage({ type: "parseWorkbook", buffer: arrayBuffer }, [
+            arrayBuffer,
+          ]);
+        });
+      }
+
+      function normalizeCityName(value) {
+        const raw = String(value || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toUpperCase();
+        const compact = raw.replace(/[^A-Z0-9]/g, "");
+        if (!compact) return "";
+        if (compact.includes("ABIDJAN")) return "ABIDJAN";
+        if (compact.includes("BOUAKE")) return "BOUAKE";
+        if (compact.includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
+        if (compact.includes("DIVO")) return "DIVO";
+        if (compact.includes("GAGNOA")) return "GAGNOA";
+        if (compact.includes("SANPEDRO")) return "SAN PEDRO";
+        if (compact.includes("KATIOLA")) return "KATIOLA";
+        return "";
+      }
+
+      function findVilleColumnIndex(headers) {
+        return (headers || []).findIndex((c) => {
+          const label = clean(c);
+          return (
+            label === "VILLE" ||
+            label.startsWith("VILLE") ||
+            label.includes("VILLE")
+          );
+        });
+      }
+
+      function prepareTrackingSheets(wb) {
+        const sheets = [];
+        wb.SheetNames.forEach((name) => {
+          const sN = clean(name);
+          if (sN.includes("TCD") || sN.includes("RECAP")) return;
+
+          const isMainInstance =
+            sN.includes("SUIVI") && sN.includes("INSTANCE");
+          const isMainRaccord =
+            sN.includes("SUIVI") && sN.includes("RACCORDEMENT");
+          if (!isMainInstance && !isMainRaccord) return;
+
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
+          if (!rows || rows.length < 2) return;
+
+          const headerRowIndex = findHeaderRow(rows);
+          const headers = (rows[headerRowIndex] || []).map((c) => clean(c));
+          sheets.push({
+            name,
+            sN,
+            isMainInstance,
+            isMainRaccord,
+            rows,
+            headerRowIndex,
+            headers,
+          });
+        });
+        return sheets;
+      }
+
+      function extractCitiesFromVilleColumns(source) {
+        const sheets = Array.isArray(source)
+          ? source
+          : prepareTrackingSheets(source);
+        const instanceCities = new Set();
+        const fallbackCities = new Set();
+
+        sheets.forEach((sheet) => {
+          const iVille = findVilleColumnIndex(sheet.headers);
+          if (iVille < 0) return;
+
+          for (let r = sheet.headerRowIndex + 1; r < sheet.rows.length; r++) {
+            const city = normalizeCityName(sheet.rows[r]?.[iVille]);
+            if (!city) continue;
+            fallbackCities.add(city);
+            if (sheet.isMainInstance) instanceCities.add(city);
+          }
+        });
+        return Array.from(
+          instanceCities.size ? instanceCities : fallbackCities,
+        );
+      }
+
+      function buildPreparedSheetsByCity(preparedSheets, cities) {
+        const grouped = Object.fromEntries(
+          (cities || []).map((city) => [city, []]),
+        );
+
+        preparedSheets.forEach((sheet) => {
+          const iVille = findVilleColumnIndex(sheet.headers);
+          if (iVille < 0) return;
+
+          const rowsByCity = {};
+          for (let r = sheet.headerRowIndex + 1; r < sheet.rows.length; r++) {
+            const row = sheet.rows[r];
+            const city = normalizeCityName(row?.[iVille]);
+            if (!city || !grouped[city]) continue;
+            if (!rowsByCity[city]) rowsByCity[city] = [];
+            rowsByCity[city].push(row);
+          }
+
+          Object.keys(rowsByCity).forEach((city) => {
+            grouped[city].push({
+              ...sheet,
+              rows: [sheet.rows[sheet.headerRowIndex], ...rowsByCity[city]],
+              headerRowIndex: 0,
+            });
+          });
+        });
+
+        return grouped;
+      }
 
       // Normalize identifier cell values for dossierKey generation
       function normalizeIdValue(v) {
@@ -472,20 +718,48 @@
         return 0;
       }
 
-      function handleFile(e) {
+      async function handleFile(e) {
         const file = e.target.files[0];
         if (!file) return;
+
         document.getElementById("loader").style.display = "flex";
+        setLoaderMessage("Chargement du canevas...");
+        await yieldToUI();
+
         const reader = new FileReader();
-        reader.onload = (evt) => {
+        reader.onload = async (evt) => {
           try {
-            const data = new Uint8Array(evt.target.result);
-            const wb = XLSX.read(data, { type: "array", cellDates: true });
-            processCityData(wb);
+            const buffer = evt.target.result;
+            let preparedSource = null;
+
+            setLoaderMessage("Lecture optimisée du fichier Excel...");
+            await yieldToUI();
+
+            try {
+              preparedSource = await parseWorkbookInWorker(buffer);
+            } catch (workerError) {
+              console.warn(
+                "Worker indisponible, lecture locale utilisée.",
+                workerError,
+              );
+              const data = new Uint8Array(buffer);
+              const wb = XLSX.read(data, {
+                type: "array",
+                cellDates: true,
+                dense: true,
+              });
+              preparedSource = prepareTrackingSheets(wb);
+            }
+
+            setLoaderMessage("Génération des rapports...");
+            await yieldToUI();
+            await processCityData(preparedSource);
           } catch (err) {
             alert("Erreur : " + err.message);
+          } finally {
+            setLoaderMessage("Analyse du canevas en cours...");
+            document.getElementById("loader").style.display = "none";
           }
-          document.getElementById("loader").style.display = "none";
         };
         reader.readAsArrayBuffer(file);
       }
@@ -944,7 +1218,10 @@
         pptx.writeFile({ fileName: getReportFilename("pptx") });
       }
 
-      function computeForCity(wb, targetCity, consolidated = false) {
+      function computeForCity(source, targetCity, consolidated = false) {
+        const preparedSheets = Array.isArray(source)
+          ? source
+          : prepareTrackingSheets(source);
         let detectedCity = "VILLE INCONNUE";
         let stats = {
           report: 0,
@@ -961,53 +1238,31 @@
         let totalItcActuelFromNoms = 0;
         let encoursFromAvancement = 0;
 
-        const canonicalCity = (value) => {
-          const v = clean(value) || "";
-          if ((v || "").includes("ABIDJAN")) return "ABIDJAN";
-          if ((v || "").includes("BOUAKE")) return "BOUAKE";
-          if ((v || "").includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
-          if ((v || "").includes("DIVO")) return "DIVO";
-          if ((v || "").includes("GAGNOA")) return "GAGNOA";
-          if ((v || "").includes("SANPEDRO")) return "SANPEDRO";
-          if ((v || "").includes("KATIOLA")) return "KATIOLA";
-          return "";
-        };
+        const canonicalCity = (value) => normalizeCityName(value);
 
         const records = [];
         let selectedCity = targetCity || "";
 
-        for (const name of wb.SheetNames) {
+        for (const sheet of preparedSheets) {
           try {
-            let sN = clean(name);
-            if ((sN || "").includes("TCD") || (sN || "").includes("RECAP"))
-              continue;
-
-            const isMainInstance =
-              (sN || "").includes("SUIVI") && (sN || "").includes("INSTANCE");
-            const isMainRaccord =
-              (sN || "").includes("SUIVI") &&
-              (sN || "").includes("RACCORDEMENT");
-            if (!isMainInstance && !isMainRaccord) continue;
-
+            const {
+              name,
+              sN,
+              isMainInstance,
+              isMainRaccord,
+              rows,
+              headerRowIndex,
+            } = sheet;
             const sheetCity = canonicalCity(sN);
-            if (!selectedCity && sheetCity) selectedCity = sheetCity;
-
-            let rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
             if (rows.length < 2) continue;
 
-            const headerRowIndex = findHeaderRow(rows);
-            let h = (rows[headerRowIndex] || []).map((c) => clean(c));
+            let h =
+              sheet.headers ||
+              (rows[headerRowIndex] || []).map((c) => clean(c));
 
             const mappedIndex = (field, heur) => heur(h);
 
-            let iVille = mappedIndex("ville", (h) =>
-              h.findIndex(
-                (c) =>
-                  (c || "").includes("VILLE") ||
-                  (c || "").includes("COMMU") ||
-                  (c || "").includes("LOCAL"),
-              ),
-            );
+            let iVille = mappedIndex("ville", (h) => findVilleColumnIndex(h));
             let iEnvoi = mappedIndex("envoi", (h) =>
               h.findIndex(
                 (c) =>
@@ -1101,18 +1356,12 @@
             for (let i = headerRowIndex + 1; i < rows.length; i++) {
               let r = rows[i];
               if (!Array.isArray(r)) continue;
-              const rowCity = iVille >= 0 ? clean(r[iVille]) : "";
+              const rowCity = iVille >= 0 ? r[iVille] : "";
               const rowCityCanonical = canonicalCity(rowCity);
               if (!selectedCity && rowCityCanonical)
                 selectedCity = rowCityCanonical;
-              if (!consolidated) {
-                if (
-                  selectedCity &&
-                  rowCityCanonical &&
-                  rowCityCanonical !== selectedCity
-                )
-                  continue;
-                if (selectedCity && sheetCity && sheetCity !== selectedCity)
+              if (!consolidated && selectedCity) {
+                if (!rowCityCanonical || rowCityCanonical !== selectedCity)
                   continue;
               }
 
@@ -1182,11 +1431,8 @@
                 !!dEnv || !!dRac || !!dPrev || !!status || hasAboValue;
               if (!hasUsefulData) continue;
 
-              if (detectedCity === "VILLE INCONNUE") {
-                const cityFromRow = rowCityCanonical;
-                const cityFromSheet = sheetCity;
-                if (cityFromRow) detectedCity = cityFromRow;
-                else if (cityFromSheet) detectedCity = cityFromSheet;
+              if (detectedCity === "VILLE INCONNUE" && rowCityCanonical) {
+                detectedCity = rowCityCanonical;
               }
 
               records.push({
@@ -1457,101 +1703,23 @@
         return { city: detectedCity, stats, audit, details };
       }
 
-      function detectCities(wb) {
-        const cities = new Set();
-        const isTrackingSheet = (sheetName) => {
-          const s = clean(sheetName);
-          const hasSuivi = (s || "").includes("SUIVI");
-          const hasInstance = (s || "").includes("INSTANCE");
-          const hasRaccord = (s || "").includes("RACCORDEMENT");
-          return hasSuivi && (hasInstance || hasRaccord);
-        };
-        const canonicalCityLocal = (value) => {
-          const v = clean(value);
-          if (v.includes("ABIDJAN")) return "ABIDJAN";
-          if (v.includes("BOUAKE")) return "BOUAKE";
-          if (v.includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
-          if (v.includes("DIVO")) return "DIVO";
-          if (v.includes("GAGNOA")) return "GAGNOA";
-          if (v.includes("SANPEDRO")) return "SANPEDRO";
-          if (v.includes("KATIOLA")) return "KATIOLA";
-          return "";
-        };
-
-        wb.SheetNames.forEach((name) => {
-          const sN = clean(name);
-          if (!isTrackingSheet(sN)) return;
-          const fromName = canonicalCityLocal(sN);
-          if (fromName) cities.add(fromName);
-          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {
-            header: 1,
-          });
-          const maxScan = Math.min(rows.length, 50);
-          for (let i = 0; i < maxScan; i++) {
-            const row = rows[i] || [];
-            for (const cell of row) {
-              const c = canonicalCityLocal(cell);
-              if (c) cities.add(c);
-            }
-          }
-        });
-        return Array.from(cities);
+      function detectCities(source) {
+        return extractCitiesFromVilleColumns(source);
       }
 
-      function processCityData(wb) {
-        // detect cities in workbook (by sheet name / scanned cells)
-        const found = detectCities(wb);
-        const isTrackingSheet = (sheetName) => {
-          const s = clean(sheetName);
-          const hasSuivi = (s || "").includes("SUIVI");
-          const hasInstance = (s || "").includes("INSTANCE");
-          const hasRaccord = (s || "").includes("RACCORDEMENT");
-          return hasSuivi && (hasInstance || hasRaccord);
-        };
-        // also collect cities explicitly present in a 'Ville' column across sheets
-        const citiesFromColumn = new Set();
-        const canonicalize = (v) => {
-          const s = clean(String(v || ""));
-          if (!s) return "";
-          if (s.includes("ABIDJAN")) return "ABIDJAN";
-          if (s.includes("BOUAKE")) return "BOUAKE";
-          if (s.includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
-          if (s.includes("DIVO")) return "DIVO";
-          if (s.includes("GAGNOA")) return "GAGNOA";
-          if (s.includes("SANPEDRO")) return "SANPEDRO";
-          if (s.includes("KATIOLA")) return "KATIOLA";
-          // fallback to cleaned token (preserve non-canonical city names)
-          return s;
-        };
-        wb.SheetNames.forEach((name) => {
-          if (!isTrackingSheet(name)) return;
-          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {
-            header: 1,
-          });
-          if (!rows || rows.length < 2) return;
-          const headerRowIndex = findHeaderRow(rows);
-          const h = (rows[headerRowIndex] || []).map((c) => clean(c));
-          const iVille = h.findIndex(
-            (c) =>
-              c.includes("VILLE") || c.includes("COMM") || c.includes("LOCAL"),
-          );
-          if (iVille >= 0) {
-            for (let r = headerRowIndex + 1; r < rows.length; r++) {
-              const cell = rows[r] && rows[r][iVille];
-              if (cell == null) continue;
-              const can = canonicalize(cell);
-              if (can) citiesFromColumn.add(can);
-            }
-          }
-        });
-        // merge detected cities and cities from 'Ville' columns
-        const mergedCities = Array.from(
-          new Set([...(found || []), ...Array.from(citiesFromColumn)]),
+      async function processCityData(source) {
+        const preparedSheets = Array.isArray(source)
+          ? source
+          : prepareTrackingSheets(source);
+        const mergedCities = detectCities(preparedSheets);
+        const groupedSheetsByCity = buildPreparedSheetsByCity(
+          preparedSheets,
+          mergedCities,
         );
 
         // If user requested consolidated aggregation, compute a single consolidated report
         if (treatConsolidated) {
-          const consolidated = computeForCity(wb, "", true);
+          const consolidated = computeForCity(preparedSheets, "", true);
           if (consolidated) {
             const cityLabel = "CONSOLIDE";
             latestReportsAll = { [cityLabel]: consolidated };
@@ -1601,7 +1769,7 @@
 
         if (!mergedCities || mergedCities.length === 0) {
           // fallback: compute as before (single city auto-detect)
-          const single = computeForCity(wb, "");
+          const single = computeForCity(preparedSheets, "");
           if (single) {
             latestReportsAll = { [single.city || "VILLE"]: single };
             latestReport = {
@@ -1649,7 +1817,10 @@
         // If we detected exactly one city from mergedCities, treat it like a single-city upload
         if (mergedCities.length === 1) {
           const singleCity = mergedCities[0];
-          const single = computeForCity(wb, singleCity);
+          const single = computeForCity(
+            groupedSheetsByCity[singleCity] || preparedSheets,
+            singleCity,
+          );
           if (single) {
             latestReportsAll = { [single.city || singleCity]: single };
             // hide multi-city controls
@@ -1693,10 +1864,18 @@
 
         // multiple cities detected: compute for each (preserve rules in computeForCity)
         const reports = {};
-        mergedCities.forEach((c) => {
-          const res = computeForCity(wb, c);
+        for (let i = 0; i < mergedCities.length; i++) {
+          const c = mergedCities[i];
+          setLoaderMessage(
+            `Analyse des villes ${i + 1}/${mergedCities.length} : ${c}`,
+          );
+          await yieldToUI();
+
+          const res = computeForCity(
+            groupedSheetsByCity[c] || preparedSheets,
+            c,
+          );
           if (res) {
-            // build a similar latestReport-like object for reuse
             reports[c] = {
               city: res.city,
               stats: res.stats,
@@ -1704,7 +1883,7 @@
               details: res.details,
             };
           }
-        });
+        }
         latestReportsAll = reports;
 
         // populate selector
