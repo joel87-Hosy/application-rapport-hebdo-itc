@@ -32,6 +32,14 @@
         color: white;
         border-bottom: 3px solid var(--itc-orange);
       }
+      .navbar-logo {
+        height: 34px;
+        width: auto;
+        margin-right: 10px;
+        background: #ffffff;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
       .card-header {
         background: #fff;
         font-weight: bold;
@@ -70,6 +78,10 @@
       .audit-hidden {
         display: none;
       }
+      .chart-panel {
+        height: 220px;
+        padding: 10px;
+      }
     </style>
   </head>
   <body>
@@ -80,13 +92,13 @@
 
     <nav class="navbar navbar-dark p-2 shadow-sm">
       <div class="container-fluid">
-        <span class="navbar-brand">
+        <span class="navbar-brand d-flex align-items-center">
           <img
-            src="data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA="
-            alt="ITC"
-            style="height: 28px; margin-right: 8px"
+            src="assets/logo-ITC-NW-01-fond-blanc-01.jpg"
+            alt="Logo ITC"
+            class="navbar-logo"
           />
-          ITC - RAPPORT D'ACTIVITÉ SEMAINE 2026
+          <span>ITC - RAPPORT D'ACTIVITÉ SEMAINE 2026</span>
         </span>
         <span id="villeLabel" class="badge bg-warning text-dark fs-6"
           >En attente de fichier</span
@@ -247,6 +259,9 @@
                   <tbody id="objectifBody"></tbody>
                 </table>
               </div>
+              <div class="chart-panel border-top bg-white">
+                <canvas id="chartObjectif"></canvas>
+              </div>
             </div>
           </div>
           <div class="col-md-6">
@@ -283,6 +298,16 @@
                   </thead>
                   <tbody id="statusBody"></tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-5">
+            <div class="card shadow-sm mb-4">
+              <div class="card-header">
+                <i class="fas fa-chart-bar me-2"></i>DIAGRAMME STATUTAIRE
+              </div>
+              <div class="chart-panel">
+                <canvas id="chartStatus"></canvas>
               </div>
             </div>
           </div>
@@ -331,6 +356,8 @@
     <script>
       let chartInstance = null;
       let chartDailyInstance = null;
+      let chartObjectifInstance = null;
+      let chartStatusInstance = null;
       let latestAudit = null;
       let latestReport = null;
       let latestReportsAll = null; // map city -> report objects
@@ -1906,10 +1933,14 @@
 
         updateChart(s);
         updateDailyChart(details.daily);
+        updateObjectifChart(details.objectif);
+        updateStatusChart(details.status);
       }
       function updateChart(s) {
         if (chartInstance) chartInstance.destroy();
-        const ctx = document.getElementById("chartReliquats").getContext("2d");
+        const canvas = document.getElementById("chartReliquats");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
         chartInstance = new Chart(ctx, {
           type: "doughnut",
           data: {
@@ -1936,7 +1967,9 @@
 
       function updateDailyChart(daily) {
         if (chartDailyInstance) chartDailyInstance.destroy();
-        const ctx = document.getElementById("chartDaily").getContext("2d");
+        const canvas = document.getElementById("chartDaily");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
         chartDailyInstance = new Chart(ctx, {
           type: "bar",
           data: {
@@ -1957,6 +1990,106 @@
           options: {
             maintainAspectRatio: false,
             plugins: { legend: { position: "top" } },
+            scales: { y: { beginAtZero: true } },
+          },
+        });
+      }
+
+      function updateObjectifChart(objectif) {
+        if (chartObjectifInstance) chartObjectifInstance.destroy();
+        const canvas = document.getElementById("chartObjectif");
+        if (!canvas || !objectif) return;
+
+        const taux = Number(objectif.taux || 0);
+        const ctx = canvas.getContext("2d");
+        chartObjectifInstance = new Chart(ctx, {
+          data: {
+            labels: ["Performance hebdo"],
+            datasets: [
+              {
+                type: "bar",
+                label: "Réalisation",
+                data: [objectif.realisation || 0],
+                backgroundColor: "#28a745",
+                borderRadius: 6,
+              },
+              {
+                type: "bar",
+                label: "Objectif",
+                data: [objectif.objectifMoov || 0],
+                backgroundColor: "#004a99",
+                borderRadius: 6,
+              },
+              {
+                type: "line",
+                label: "Taux (%)",
+                data: [taux],
+                borderColor: "#f39200",
+                backgroundColor: "#f39200",
+                yAxisID: "y1",
+                tension: 0.35,
+              },
+            ],
+          },
+          options: {
+            maintainAspectRatio: false,
+            plugins: { legend: { position: "top" } },
+            scales: {
+              y: { beginAtZero: true },
+              y1: {
+                beginAtZero: true,
+                position: "right",
+                grid: { drawOnChartArea: false },
+                suggestedMax: Math.max(100, Math.ceil(taux / 10) * 10 || 100),
+              },
+            },
+          },
+        });
+      }
+
+      function updateStatusChart(status) {
+        if (chartStatusInstance) chartStatusInstance.destroy();
+        const canvas = document.getElementById("chartStatus");
+        if (!canvas || !status) return;
+
+        const ctx = canvas.getContext("2d");
+        chartStatusInstance = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: [
+              "Hors zone",
+              "Sans PCO",
+              "Avec PCO",
+              "Autre",
+              "Étude",
+              "Raccordé",
+            ],
+            datasets: [
+              {
+                label: "Volume",
+                data: [
+                  status.horsZone || 0,
+                  status.sansPco || 0,
+                  status.avecPco || 0,
+                  status.autre || 0,
+                  status.etude || 0,
+                  status.raccorde || 0,
+                ],
+                backgroundColor: [
+                  "#dc3545",
+                  "#ffc107",
+                  "#0d6efd",
+                  "#6f42c1",
+                  "#20c997",
+                  "#198754",
+                ],
+                borderRadius: 6,
+              },
+            ],
+          },
+          options: {
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
             scales: { y: { beginAtZero: true } },
           },
         });
