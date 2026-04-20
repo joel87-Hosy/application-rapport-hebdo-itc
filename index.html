@@ -370,6 +370,16 @@
           .toUpperCase()
           .replace(/\s+/g, "")
           .trim();
+      const isInstanceSheetName = (sheetName) =>
+        clean(sheetName).includes("INSTANCE");
+      const isRaccordSheetName = (sheetName) => {
+        const normalized = clean(sheetName);
+        return (
+          normalized.includes("RACCORDEMENT") ||
+          normalized.includes("RACCORDES") ||
+          normalized.includes("RACCORDE")
+        );
+      };
       const normalizeKey = (v) => clean(v).replace(/[^A-Z0-9]/g, "");
       const yieldToUI = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -434,8 +444,11 @@
                 const sN = clean(name);
                 if (sN.includes("TCD") || sN.includes("RECAP")) return;
 
-                const isMainInstance = sN.includes("SUIVI") && sN.includes("INSTANCE");
-                const isMainRaccord = sN.includes("SUIVI") && sN.includes("RACCORDEMENT");
+                const isMainInstance = sN.includes("INSTANCE");
+                const isMainRaccord =
+                  sN.includes("RACCORDEMENT") ||
+                  sN.includes("RACCORDES") ||
+                  sN.includes("RACCORDE");
                 if (!isMainInstance && !isMainRaccord) return;
 
                 const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true });
@@ -540,10 +553,8 @@
           const sN = clean(name);
           if (sN.includes("TCD") || sN.includes("RECAP")) return;
 
-          const isMainInstance =
-            sN.includes("SUIVI") && sN.includes("INSTANCE");
-          const isMainRaccord =
-            sN.includes("SUIVI") && sN.includes("RACCORDEMENT");
+          const isMainInstance = isInstanceSheetName(sN);
+          const isMainRaccord = isRaccordSheetName(sN);
           if (!isMainInstance && !isMainRaccord) return;
 
           const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
@@ -1477,14 +1488,14 @@
         };
 
         records.forEach((rec) => {
-          if (!(rec.sN || "").includes("INSTANCE")) return;
+          if (!isInstanceSheetName(rec.sN)) return;
           const key = rec.dossierKey || `INST-${rec.rowIndex}`;
           instanceMap.set(key, pickLatestByEnv(instanceMap.get(key), rec));
         });
 
         const raccordMap = new Map();
         records.forEach((rec) => {
-          if (!(rec.sN || "").includes("RACCORDEMENT")) return;
+          if (!isRaccordSheetName(rec.sN)) return;
           const key = rec.dossierKey || `RACC-${rec.rowIndex}`;
           if (!raccordMap.has(key)) {
             raccordMap.set(key, {
@@ -1546,7 +1557,7 @@
         );
         const connectedByRaccordementRows = records.filter(
           (rec) =>
-            (rec.sN || "").includes("RACCORDEMENT") && inRecuWindow(rec.dRac),
+            isRaccordSheetName(rec.sN) && inRecuWindow(rec.dRac),
         );
         stats.recu = receivedByEnvoiRows.length;
         stats.racc = connectedByRaccordementRows.length;
