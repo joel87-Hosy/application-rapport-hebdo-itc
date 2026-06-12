@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FTECH - Dashboard Mono-Ville 2026</title>
+    <title>ITC - Reporting DG</title>
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -12,26 +12,29 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
       rel="stylesheet"
     />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
     <style>
       :root {
         --itc-blue: #004a99;
         --itc-orange: #f39200;
+        --itc-ink: #1f2933;
+        --itc-line: #d9e2ec;
       }
+
       body {
+        min-height: 100vh;
         background-color: #f4f7f6;
+        color: var(--itc-ink);
         font-family: "Segoe UI", sans-serif;
-        font-size: 0.9rem;
+        font-size: 0.95rem;
       }
+
       .navbar {
         background: var(--itc-blue);
         color: white;
         border-bottom: 3px solid var(--itc-orange);
       }
+
       .navbar-logo {
         height: 34px;
         width: auto;
@@ -40,56 +43,148 @@
         padding: 2px 6px;
         border-radius: 6px;
       }
-      .card-header {
-        background: #fff;
-        font-weight: bold;
-        color: var(--itc-blue);
-        border-bottom: 2px solid #eee;
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+        gap: 18px;
+        max-width: 1380px;
+        margin: 0 auto;
       }
-      .table-itc {
-        font-size: 0.8rem;
-        text-align: center;
+
+      .panel,
+      .metric,
+      .report-table-wrap {
+        border: 1px solid var(--itc-line);
+        border-radius: 8px;
+        background: #ffffff;
       }
-      .bg-itc-dark {
-        background: #343a40 !important;
-        color: white;
+
+      .panel {
+        padding: 18px;
       }
-      .loader-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(255, 255, 255, 0.9);
-        z-index: 9999;
-        justify-content: center;
-        align-items: center;
-        flex-direction: column;
+
+      .upload-zone {
+        cursor: pointer;
+        min-height: 180px;
+        border: 2px dashed #b8c7d8;
+        transition:
+          border-color 160ms ease,
+          box-shadow 160ms ease,
+          transform 160ms ease;
       }
-      .stat-card {
-        border-left: 4px solid var(--itc-blue);
+
+      .upload-zone:hover,
+      .upload-zone.drag-over {
+        border-color: var(--itc-blue);
+        box-shadow: 0 0.5rem 1.4rem rgba(0, 74, 153, 0.12);
+        transform: translateY(-1px);
       }
-      .audit-mono {
-        font-family: Consolas, "Courier New", monospace;
+
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(120px, 1fr));
+        gap: 12px;
+      }
+
+      .metric {
+        padding: 12px;
+      }
+
+      .metric span {
+        color: #52606d;
+        display: block;
         font-size: 0.78rem;
-        white-space: pre-wrap;
+        line-height: 1.2;
       }
-      .audit-hidden {
+
+      .metric strong {
+        display: block;
+        margin-top: 4px;
+        font-size: 1.45rem;
+      }
+
+      .report-table-wrap {
+        overflow-x: auto;
+      }
+
+      .report-table {
+        min-width: 760px;
+      }
+
+      .report-table th {
+        background: #edf4fb;
+        color: #102a43;
+        font-size: 0.78rem;
+        vertical-align: middle;
+      }
+
+      .report-table td,
+      .report-table th {
+        white-space: nowrap;
+      }
+
+      .status-list {
+        max-height: 220px;
+        overflow: auto;
+      }
+
+      .status-item {
+        border-bottom: 1px solid var(--itc-line);
+      }
+
+      .status-item summary {
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 0;
+      }
+
+      .status-item summary::-webkit-details-marker {
         display: none;
       }
-      .chart-panel {
-        height: 220px;
-        padding: 10px;
+
+      .status-item summary span::before {
+        content: "\f054";
+        display: inline-block;
+        font-family: "Font Awesome 6 Free";
+        font-weight: 900;
+        font-size: 0.65rem;
+        margin-right: 6px;
+        transition: transform 120ms ease;
+      }
+
+      .status-item[open] summary span::before {
+        transform: rotate(90deg);
+      }
+
+      .status-commune {
+        padding: 8px 0 10px 14px;
+      }
+
+      .status-detail-table {
+        font-size: 0.74rem;
+        min-width: 620px;
+      }
+
+      .small-muted {
+        color: #64748b;
+        font-size: 0.82rem;
+      }
+
+      @media (max-width: 980px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .metric-grid {
+          grid-template-columns: repeat(2, minmax(120px, 1fr));
+        }
       }
     </style>
   </head>
   <body>
-    <div id="loader" class="loader-overlay">
-      <div class="spinner-border text-primary" role="status"></div>
-      <h5 id="loaderText" class="mt-3">Analyse du canevas en cours...</h5>
-    </div>
-
     <nav class="navbar navbar-dark p-2 shadow-sm">
       <div class="container-fluid">
         <span class="navbar-brand d-flex align-items-center">
@@ -98,2199 +193,767 @@
             alt="Logo ITC"
             class="navbar-logo"
           />
-          <span>ITC - RAPPORT D'ACTIVITÉ SEMAINE 2026</span>
+          <span>ITC - Reporting DG</span>
         </span>
-        <span id="villeLabel" class="badge bg-warning text-dark fs-6"
-          >En attente de fichier</span
-        >
+        <span id="fileLabel" class="badge bg-warning text-dark fs-6">
+          En attente de fichier
+        </span>
       </div>
     </nav>
 
-    <div class="container-fluid p-3">
-      <div
-        id="dropZone"
-        class="card border-2 p-4 text-center mb-4 bg-white shadow-sm"
-        style="cursor: pointer; border-style: dashed !important"
-        onclick="document.getElementById('fileIn').click()"
-      >
-        <input
-          type="file"
-          id="fileIn"
-          hidden
-          accept=".xlsx,.xls"
-          onchange="handleFile(event)"
-        />
-        <i class="fas fa-file-excel fa-3x text-success mb-2"></i>
-        <h5>RAPPORTS HEBDO ITC</h5>
-        <p class="text-muted small">
-          Analyse automatique des onglets "INSTANCES" et "RACCORDEMENT"
-        </p>
-      </div>
-
-      <div id="mainDashboard" style="display: none">
-        <div class="d-flex justify-content-end gap-2 mb-3">
-          <label class="small align-self-center mb-0">Date upload</label>
-          <input
-            id="uploadDateInput"
-            type="date"
-            class="form-control form-control-sm w-auto"
-            style="max-width: 140px"
-            title="Date de référence pour J (upload)"
-          />
-
-          <div class="form-check form-check-inline align-self-center ms-2">
-            <input
-              class="form-check-input"
-              type="checkbox"
-              id="consolidatedToggle"
-              onchange="toggleConsolidated(this.checked)"
-            />
-            <label class="form-check-label small" for="consolidatedToggle"
-              >Considérer comme consolidé</label
-            >
-          </div>
-          <!-- mapping configuration removed -->
-
-          <button
-            class="btn btn-sm btn-outline-primary"
-            onclick="exportExcelReport()"
-          >
-            <i class="fas fa-file-excel me-1"></i>Exporter Excel
-          </button>
-          <select
-            id="citySelect"
-            class="form-select form-select-sm w-auto"
-            style="display: none"
-            onchange="onCityChange(this.value)"
-          ></select>
-          <button
-            id="exportAllBtn"
-            class="btn btn-sm btn-outline-success"
-            style="display: none"
-            onclick="exportAllExcel()"
-          >
-            <i class="fas fa-file-excel me-1"></i>Exporter tous (Excel)
-          </button>
-          <button
-            class="btn btn-sm btn-outline-danger"
-            onclick="exportPdfReport()"
-          >
-            <i class="fas fa-file-pdf me-1"></i>Exporter PDF
-          </button>
-          <button
-            class="btn btn-sm btn-outline-secondary"
-            onclick="exportPowerPointReport()"
-          >
-            <i class="fas fa-file-powerpoint me-1"></i>Exporter PowerPoint
-          </button>
-        </div>
-
-        <div class="card shadow-sm mb-4">
-          <div class="card-header bg-primary text-white">
-            <i class="fas fa-calendar-check me-2"></i> POINT HEBDO
-          </div>
-          <div class="table-responsive">
-            <table class="table table-bordered table-itc mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th>DÉSIGNATION</th>
-                  <th class="bg-itc-dark text-white">VALEURS</th>
-                </tr>
-              </thead>
-              <tbody id="hebdoBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-md-7">
-            <div class="card shadow-sm mb-4">
-              <div class="card-header">
-                <i class="fas fa-list-ul me-2"></i> RAPPEL DES RELIQUATS (HORS
-                BLOQUÉS)
-              </div>
-              <div class="table-responsive">
-                <table
-                  class="table table-sm table-striped table-bordered table-itc mb-0"
-                >
-                  <thead class="bg-light">
-                    <tr>
-                      <th>Raccordement en cours</th>
-                      <th>Déploiement PCO</th>
-                      <th>Études en cours</th>
-                      <th>Implantation PM</th>
-                      <th>Sans Box Huawei</th>
-                      <th class="bg-itc-dark text-white">TOTAL</th>
-                    </tr>
-                  </thead>
-                  <tbody id="reliquatBody"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-md-5">
-            <div class="card shadow-sm mb-4">
-              <div class="card-header">
-                <i class="fas fa-chart-pie me-2"></i> RÉPARTITION DES RELIQUATS
-              </div>
-              <div style="height: 200px; padding: 10px">
-                <canvas id="chartReliquats"></canvas>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-md-6">
-            <div class="card shadow-sm mb-4">
-              <div class="card-header">
-                <i class="fas fa-bullseye me-2"></i>RÉALISATION & OBJECTIF
-              </div>
-              <div class="table-responsive">
-                <table class="table table-sm table-bordered table-itc mb-0">
-                  <thead class="table-light">
-                    <tr>
-                      <th>Réalisation Semaine</th>
-                      <th>Objectif Moov</th>
-                      <th>Taux réalisation</th>
-                    </tr>
-                  </thead>
-                  <tbody id="objectifBody"></tbody>
-                </table>
-              </div>
-              <div class="chart-panel border-top bg-white">
-                <canvas id="chartObjectif"></canvas>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="card shadow-sm mb-4">
-              <div class="card-header">
-                <i class="fas fa-chart-line me-2"></i>ÉVOLUTION JOURNALIÈRE
-              </div>
-              <div style="height: 220px; padding: 10px">
-                <canvas id="chartDaily"></canvas>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-md-7">
-            <div class="card shadow-sm mb-4">
-              <div class="card-header">
-                <i class="fas fa-layer-group me-2"></i>RÉPARTITION STATUTAIRE
-                SEMAINE
-              </div>
-              <div class="table-responsive">
-                <table class="table table-sm table-bordered table-itc mb-0">
-                  <thead class="table-light">
-                    <tr>
-                      <th>Hors zone</th>
-                      <th>Sans PCO</th>
-                      <th>Avec PCO</th>
-                      <th>Autre DC/DI/INJ</th>
-                      <th>Étude</th>
-                      <th>Raccordé</th>
-                      <th>% raccordé/reçus</th>
-                    </tr>
-                  </thead>
-                  <tbody id="statusBody"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-5">
-            <div class="card shadow-sm mb-4">
-              <div class="card-header">
-                <i class="fas fa-chart-bar me-2"></i>DIAGRAMME STATUTAIRE
-              </div>
-              <div class="chart-panel">
-                <canvas id="chartStatus"></canvas>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card shadow-sm mb-4">
+    <main class="container-fluid p-3">
+      <div class="workspace">
+        <aside class="panel shadow-sm">
           <div
-            class="card-header d-flex justify-content-between align-items-center"
+            id="dropZone"
+            class="upload-zone d-flex flex-column align-items-center justify-content-center text-center p-4"
+            onclick="document.getElementById('fileIn').click()"
           >
-            <span
-              ><i class="fas fa-shield-alt me-2"></i>MODE AUDIT DES RÈGLES</span
+            <input
+              type="file"
+              id="fileIn"
+              hidden
+              accept=".xlsx,.xls"
+              onchange="handleFile(event)"
+            />
+            <i class="fas fa-file-excel fa-3x text-success mb-3"></i>
+            <h5>Televerser le canevas</h5>
+            <p class="small-muted mb-0">
+              Selectionnez ou deposez le fichier Excel du jour.
+            </p>
+          </div>
+
+          <div class="mt-4">
+            <label for="reportDate" class="form-label fw-semibold">
+              Date du rapport
+            </label>
+            <input id="reportDate" type="date" class="form-control" />
+          </div>
+
+          <div class="d-grid gap-2 mt-3">
+            <button
+              id="generateBtn"
+              class="btn btn-primary"
+              type="button"
+              disabled
+              onclick="generateReport()"
             >
-            <div class="form-check form-switch m-0">
-              <input
-                class="form-check-input"
-                type="checkbox"
-                id="auditToggle"
-                onchange="toggleAudit()"
-              />
-              <label class="form-check-label small" for="auditToggle"
-                >Activer</label
-              >
+              <i class="fas fa-table me-2"></i>Generer les trois tableaux
+            </button>
+            <button
+              id="exportBtn"
+              class="btn btn-outline-success"
+              type="button"
+              disabled
+              onclick="exportReport()"
+            >
+              <i class="fas fa-download me-2"></i>Exporter le rapport Excel
+            </button>
+          </div>
+
+          <hr />
+
+          <div>
+            <h6 class="fw-semibold mb-2">Statuts detectes</h6>
+            <div id="statusList" class="status-list small-muted">
+              Aucun canevas charge.
             </div>
           </div>
-          <div id="auditPanel" class="card-body audit-hidden">
-            <div class="table-responsive mb-3">
-              <table class="table table-sm table-bordered table-itc mb-0">
-                <thead class="table-light">
-                  <tr>
-                    <th>Règle auditée</th>
-                    <th>Valeur</th>
-                  </tr>
-                </thead>
-                <tbody id="auditBody"></tbody>
-              </table>
+        </aside>
+
+        <section>
+          <div class="metric-grid mb-3">
+            <div class="metric shadow-sm">
+              <span>Lignes INSTANCE</span>
+              <strong id="instanceCount">0</strong>
             </div>
-            <div class="small text-muted mb-2">
-              Échantillon des dossiers comptés (pour vérifier les règles métier)
+            <div class="metric shadow-sm">
+              <span>Lignes RACCORDE</span>
+              <strong id="connectedCount">0</strong>
             </div>
-            <pre id="auditNotes" class="audit-mono mb-0"></pre>
+            <div class="metric shadow-sm">
+              <span>Raccordements du jour</span>
+              <strong id="dailyConnectedCount">0</strong>
+            </div>
+            <div class="metric shadow-sm">
+              <span>Total instances</span>
+              <strong id="totalInstanceCount">0</strong>
+            </div>
           </div>
-        </div>
+
+          <div id="message" class="alert alert-info shadow-sm">
+            Chargez le canevas pour produire le reporting DG.
+          </div>
+
+          <div id="reportOutput" class="d-grid gap-3"></div>
+        </section>
       </div>
-    </div>
+    </main>
 
     <script>
-      let chartInstance = null;
-      let chartDailyInstance = null;
-      let chartObjectifInstance = null;
-      let chartStatusInstance = null;
-      let latestAudit = null;
-      let latestReport = null;
-      let latestReportsAll = null; // map city -> report objects
-      let treatConsolidated = false; // if true, aggregate all sheets into one report
-      let workbookWorker = null;
-      const clean = (s) =>
-        String(s || "")
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .toUpperCase()
-          .replace(/\s+/g, "")
-          .trim();
-      const isInstanceSheetName = (sheetName) =>
-        clean(sheetName).includes("INSTANCE");
-      const isRaccordSheetName = (sheetName) => {
-        const normalized = clean(sheetName);
-        return (
-          normalized.includes("RACCORDEMENT") ||
-          normalized.includes("RACCORDES") ||
-          normalized.includes("RACCORDE")
-        );
+      const RULES = {
+        instanceSheet: "INSTANCE",
+        connectedSheet: "RACCORDE",
+        columns: {
+          instanceRab: ["N° abonnement", "Numero abonnement", "NumeroAbonnement"],
+          instanceName: ["Nom du client", "NomClient"],
+          instanceCommune: "Commune",
+          instanceContact1: ["Contact 1", "Contact1"],
+          instanceContact2: ["Contact 2", "Contact2"],
+          instanceDate: "Date enregistrement",
+          instanceSendDate: [
+            "Date d'envoi aux prestataires",
+            "Date d'envoi prestataire",
+            "Date envoi prestataire",
+            "date d'envoi des instanaces aux prestataires",
+          ],
+          instanceProgress: "Avancement",
+          instanceConnectionDate: [
+            "Date prevue/reelle raccordement",
+            "Date prevue / reelle raccordement",
+            "Date prévue/réelle raccordement",
+            "Date prévue / réelle raccordement",
+          ],
+          instanceDelay: "DELAI",
+          instancePco: "PCO",
+          instanceStudy: [
+            "Etude technique",
+            "Etude technique initial",
+          ],
+          instanceProblem: ["Probleme"],
+          instanceComments: [
+            "Commentaires",
+            "Commentaires terrain",
+            "Commentaires internes",
+          ],
+          connectedRegisterDate: "Date d'enregistrement d'instances",
+          connectedSendDate: "date d'envoi des instanaces aux prestataires",
+          connectedDate: "Date réelle de raccordement du client",
+          connectedStatus:
+            "Statut ( etude en cours , sans PCO , avec PCO, Pb clients, Pb Syndic)",
+        },
+        statuses: {
+          pendingStudy: [
+            "reprise etude en cours",
+            "reprise etude non realise",
+            "reprise etude non realisee",
+          ],
+          withoutPco: ["sans pco"],
+          withPco: ["avec pco"],
+          outOfZone: [
+            "hors zone",
+            "hors zone couverture pco",
+            "hors zone couverture plaque",
+            "hors zone couverture sous plaque",
+          ],
+          activeConnectionInProgress: [
+            "en cours de raccordement",
+            "raccordement en cours",
+          ],
+          activeConnectionImplantation: ["implantation pm"],
+          connected: ["raccorde"],
+        },
       };
-      const normalizeKey = (v) => clean(v).replace(/[^A-Z0-9]/g, "");
-      const yieldToUI = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-      function setLoaderMessage(message) {
-        const label = document.getElementById("loaderText");
-        if (label) label.innerText = message;
-      }
+      const state = {
+        workbookRows: null,
+        reportRows: null,
+        selectedFileName: "",
+      };
 
-      function getWorkbookWorker() {
-        if (workbookWorker) return workbookWorker;
+      const dropZone = document.getElementById("dropZone");
+      const fileInput = document.getElementById("fileIn");
+      const fileLabel = document.getElementById("fileLabel");
+      const message = document.getElementById("message");
+      const reportDateInput = document.getElementById("reportDate");
+      const generateBtn = document.getElementById("generateBtn");
+      const exportBtn = document.getElementById("exportBtn");
 
-        const workerSource = `
-          self.importScripts("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
-          const clean = (s) =>
-            String(s || "")
-              .normalize("NFD")
-              .replace(/[\\u0300-\\u036f]/g, "")
-              .toUpperCase()
-              .replace(/\\s+/g, "")
-              .trim();
+      reportDateInput.value = new Date().toISOString().slice(0, 10);
 
-          function findHeaderRow(rows) {
-            const maxScan = Math.min(rows.length, 50);
-            for (let i = 0; i < maxScan; i++) {
-              const h = (rows[i] || []).map((c) => clean(c));
-              const hasAbo = h.some(
-                (c) =>
-                  c.includes("ABONNEMENT") ||
-                  c.includes("NUMERO") ||
-                  c.includes("MSISDN") ||
-                  c.includes("REF") ||
-                  c.includes("DOSSIER") ||
-                  c.includes("CLIENT") ||
-                  c.includes("TEL") ||
-                  c.includes("TELEPHONE"),
-              );
-              const hasDate = h.some(
-                (c) =>
-                  c.includes("ENVOI") ||
-                  c.includes("REELLE") ||
-                  c.includes("PREVISIONNELLE") ||
-                  c.includes("RACCORDEMENT") ||
-                  c.includes("DATE"),
-              );
-              if (hasAbo && hasDate) return i;
-            }
-            for (let i = 0; i < Math.min(rows.length, 8); i++) {
-              if ((rows[i] || []).some((c) => c != null && String(c).trim().length > 0)) return i;
-            }
-            return 0;
-          }
-
-          self.onmessage = (event) => {
-            const { type, buffer } = event.data || {};
-            if (type !== "parseWorkbook") return;
-
-            try {
-              const wb = XLSX.read(buffer, { type: "array", cellDates: true, dense: true });
-              const sheets = [];
-
-              wb.SheetNames.forEach((name) => {
-                const sN = clean(name);
-                if (sN.includes("TCD") || sN.includes("RECAP")) return;
-
-                const isMainInstance = sN.includes("INSTANCE");
-                const isMainRaccord =
-                  sN.includes("RACCORDEMENT") ||
-                  sN.includes("RACCORDES") ||
-                  sN.includes("RACCORDE");
-                if (!isMainInstance && !isMainRaccord) return;
-
-                const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true });
-                if (!rows || rows.length < 2) return;
-
-                const headerRowIndex = findHeaderRow(rows);
-                const headers = (rows[headerRowIndex] || []).map((c) => clean(c));
-                sheets.push({
-                  name,
-                  sN,
-                  isMainInstance,
-                  isMainRaccord,
-                  rows,
-                  headerRowIndex,
-                  headers,
-                });
-              });
-
-              self.postMessage({ type: "parsedWorkbook", preparedSheets: sheets });
-            } catch (error) {
-              self.postMessage({
-                type: "parseError",
-                message: error?.message || String(error),
-              });
-            }
-          };
-        `;
-
-        const blob = new Blob([workerSource], {
-          type: "application/javascript",
-        });
-        workbookWorker = new Worker(URL.createObjectURL(blob));
-        return workbookWorker;
-      }
-
-      function parseWorkbookInWorker(arrayBuffer) {
-        return new Promise((resolve, reject) => {
-          if (typeof Worker === "undefined") {
-            reject(new Error("Worker non supporté"));
-            return;
-          }
-
-          const worker = getWorkbookWorker();
-          const onMessage = (event) => {
-            const data = event.data || {};
-            if (data.type === "parsedWorkbook") {
-              cleanup();
-              resolve(data.preparedSheets || []);
-            } else if (data.type === "parseError") {
-              cleanup();
-              reject(new Error(data.message || "Erreur de lecture Excel"));
-            }
-          };
-          const onError = (error) => {
-            cleanup();
-            reject(error);
-          };
-          const cleanup = () => {
-            worker.removeEventListener("message", onMessage);
-            worker.removeEventListener("error", onError);
-          };
-
-          worker.addEventListener("message", onMessage);
-          worker.addEventListener("error", onError);
-          worker.postMessage({ type: "parseWorkbook", buffer: arrayBuffer }, [
-            arrayBuffer,
-          ]);
-        });
-      }
-
-      function normalizeCityName(value) {
-        const raw = String(value || "")
+      function normalize(value) {
+        return String(value ?? "")
           .normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "")
-          .toUpperCase();
-        const compact = raw.replace(/[^A-Z0-9]/g, "");
-        if (!compact) return "";
-        if (compact.includes("ABIDJAN")) return "ABIDJAN";
-        if (compact.includes("BOUAKE")) return "BOUAKE";
-        if (compact.includes("YAMOUSSOUKRO")) return "YAMOUSSOUKRO";
-        if (compact.includes("DIVO")) return "DIVO";
-        if (compact.includes("GAGNOA")) return "GAGNOA";
-        if (compact.includes("SANPEDRO")) return "SAN PEDRO";
-        if (compact.includes("KATIOLA")) return "KATIOLA";
-        return "";
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
       }
 
-      function findVilleColumnIndex(headers) {
-        return (headers || []).findIndex((c) => {
-          const label = clean(c);
-          return (
-            label === "VILLE" ||
-            label.startsWith("VILLE") ||
-            label.includes("VILLE")
-          );
-        });
-      }
-
-      function prepareTrackingSheets(wb) {
-        const sheets = [];
-        wb.SheetNames.forEach((name) => {
-          const sN = clean(name);
-          if (sN.includes("TCD") || sN.includes("RECAP")) return;
-
-          const isMainInstance = isInstanceSheetName(sN);
-          const isMainRaccord = isRaccordSheetName(sN);
-          if (!isMainInstance && !isMainRaccord) return;
-
-          const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
-          if (!rows || rows.length < 2) return;
-
-          const headerRowIndex = findHeaderRow(rows);
-          const headers = (rows[headerRowIndex] || []).map((c) => clean(c));
-          sheets.push({
-            name,
-            sN,
-            isMainInstance,
-            isMainRaccord,
-            rows,
-            headerRowIndex,
-            headers,
+      function getValue(row, columnName) {
+        if (!row) return "";
+        const names = Array.isArray(columnName) ? columnName : [columnName];
+        const wanted = names.map((name) => normalize(name));
+        const keys = Object.keys(row);
+        let key = keys.find((name) => wanted.includes(normalize(name)));
+        if (!key) {
+          key = keys.find((name) => {
+            const cleanName = normalize(name);
+            return wanted.some(
+              (item) => cleanName.includes(item) || item.includes(cleanName)
+            );
           });
-        });
-        return sheets;
-      }
-
-      function extractCitiesFromVilleColumns(source) {
-        const sheets = Array.isArray(source)
-          ? source
-          : prepareTrackingSheets(source);
-        const instanceCities = new Set();
-        const fallbackCities = new Set();
-
-        sheets.forEach((sheet) => {
-          const iVille = findVilleColumnIndex(sheet.headers);
-          if (iVille < 0) return;
-
-          for (let r = sheet.headerRowIndex + 1; r < sheet.rows.length; r++) {
-            const city = normalizeCityName(sheet.rows[r]?.[iVille]);
-            if (!city) continue;
-            fallbackCities.add(city);
-            if (sheet.isMainInstance) instanceCities.add(city);
-          }
-        });
-        return Array.from(
-          instanceCities.size ? instanceCities : fallbackCities,
-        );
-      }
-
-      function buildPreparedSheetsByCity(preparedSheets, cities) {
-        const grouped = Object.fromEntries(
-          (cities || []).map((city) => [city, []]),
-        );
-
-        preparedSheets.forEach((sheet) => {
-          const iVille = findVilleColumnIndex(sheet.headers);
-          if (iVille < 0) return;
-
-          const rowsByCity = {};
-          for (let r = sheet.headerRowIndex + 1; r < sheet.rows.length; r++) {
-            const row = sheet.rows[r];
-            const city = normalizeCityName(row?.[iVille]);
-            if (!city || !grouped[city]) continue;
-            if (!rowsByCity[city]) rowsByCity[city] = [];
-            rowsByCity[city].push(row);
-          }
-
-          Object.keys(rowsByCity).forEach((city) => {
-            grouped[city].push({
-              ...sheet,
-              rows: [sheet.rows[sheet.headerRowIndex], ...rowsByCity[city]],
-              headerRowIndex: 0,
-            });
-          });
-        });
-
-        return grouped;
-      }
-
-      // Normalize identifier cell values for dossierKey generation
-      function normalizeIdValue(v) {
-        if (v == null) return "";
-        let s = String(v || "")
-          .normalize("NFD")
-          .replace(/[^A-Za-z0-9]/g, "")
-          .toUpperCase();
-        s = s.replace(/^REF|^DOSSIER|^D#|^ID\W*/i, "");
-        s = s.replace(/^0+/, "");
-        // If purely numeric and too long (phone numbers), keep last 8 digits
-        if (/^\d+$/.test(s) && s.length > 8) s = s.slice(-8);
-        return s;
-      }
-
-      function parseDate(val) {
-        if (!val) return null;
-        if (val instanceof Date) {
-          const d = new Date(val);
-          d.setHours(0, 0, 0, 0);
-          return d;
         }
-        if (!isNaN(val) && typeof val === "number") {
-          try {
-            if (
-              typeof XLSX !== "undefined" &&
-              XLSX.SSF &&
-              typeof XLSX.SSF.parse_date_code === "function"
-            ) {
-              const pd = XLSX.SSF.parse_date_code(val);
-              if (pd && pd.y) {
-                const d = new Date(pd.y, pd.m - 1, pd.d);
-                d.setHours(0, 0, 0, 0);
-                return d;
-              }
-            }
-          } catch (e) {
-            // fallback
-          }
-          const d = new Date((val - 25569) * 86400 * 1000);
-          d.setHours(0, 0, 0, 0);
-          return d;
+        return key ? row[key] : "";
+      }
+
+      function excelDateToDate(value) {
+        if (!value && value !== 0) return null;
+        if (value instanceof Date) return value;
+        if (typeof value === "number") {
+          const utcValue = (value - 25569) * 86400;
+          return new Date(utcValue * 1000);
         }
-        let s = String(val).trim().replace(/\./g, "/");
-        let p = s.split(/[-/ :]/);
-        if (p.length >= 3) {
-          if (p[2].length === 4) {
-            const d = new Date(p[2], p[1] - 1, p[0]);
-            d.setHours(0, 0, 0, 0);
-            return d;
-          }
-          if (p[0].length === 4) {
-            const d = new Date(p[0], p[1] - 1, p[2]);
-            d.setHours(0, 0, 0, 0);
-            return d;
-          }
-        }
-        const fallback = new Date(s);
-        if (!isNaN(fallback.getTime())) {
-          fallback.setHours(0, 0, 0, 0);
-          return fallback;
+        if (typeof value === "string") {
+          const parsed = new Date(value);
+          return Number.isNaN(parsed.getTime()) ? null : parsed;
         }
         return null;
       }
 
-      function findHeaderRow(rows) {
-        const maxScan = Math.min(rows.length, 50);
-        for (let i = 0; i < maxScan; i++) {
-          const h = (rows[i] || []).map((c) => clean(c));
-          const hasAbo = h.some(
-            (c) =>
-              c.includes("ABONNEMENT") ||
-              c.includes("NUMERO") ||
-              c.includes("MSISDN") ||
-              c.includes("REF") ||
-              c.includes("DOSSIER") ||
-              c.includes("CLIENT") ||
-              c.includes("TEL") ||
-              c.includes("TELEPHONE"),
-          );
-          const hasDate = h.some(
-            (c) =>
-              c.includes("ENVOI") ||
-              c.includes("REELLE") ||
-              c.includes("PREVISIONNELLE") ||
-              c.includes("RACCORDEMENT") ||
-              c.includes("DATE"),
-          );
-          if (hasAbo && hasDate) return i;
-        }
-        // fallback: first non-empty row
-        for (let i = 0; i < Math.min(rows.length, 8); i++) {
-          if (
-            (rows[i] || []).some(
-              (c) => c != null && String(c).trim().length > 0,
-            )
-          )
-            return i;
-        }
-        return 0;
+      function sameDay(value, isoDate) {
+        const date = excelDateToDate(value);
+        if (!date) return false;
+        return date.toISOString().slice(0, 10) === isoDate;
       }
 
-      async function handleFile(e) {
-        const file = e.target.files[0];
-        if (!file) return;
+      function addDaysIso(isoDate, days) {
+        const date = new Date(`${isoDate}T00:00:00`);
+        if (Number.isNaN(date.getTime())) return isoDate;
+        date.setDate(date.getDate() + days);
+        return date.toISOString().slice(0, 10);
+      }
 
-        document.getElementById("loader").style.display = "flex";
-        setLoaderMessage("Chargement du canevas...");
-        await yieldToUI();
+      function daysBetween(startValue, endIsoDate) {
+        const start = excelDateToDate(startValue);
+        const end = new Date(`${endIsoDate}T00:00:00`);
+        if (!start || Number.isNaN(end.getTime())) return null;
+        return Math.max(0, Math.round((end - start) / 86400000));
+      }
+
+      function daysBetweenValues(startValue, endValue) {
+        const start = excelDateToDate(startValue);
+        const end = excelDateToDate(endValue);
+        if (!start || !end) return null;
+        return Math.max(0, Math.round((end - start) / 86400000));
+      }
+
+      function hoursBetweenValues(startValue, endValue) {
+        const start = excelDateToDate(startValue);
+        const end = excelDateToDate(endValue);
+        if (!start || !end) return null;
+        return Math.max(0, (end - start) / 3600000);
+      }
+
+      function average(values) {
+        const valid = values.filter((value) => Number.isFinite(value));
+        if (!valid.length) return 0;
+        return Math.round(
+          valid.reduce((sum, value) => sum + value, 0) / valid.length
+        );
+      }
+
+      function averageRaw(values) {
+        const valid = values.filter((value) => Number.isFinite(value));
+        if (!valid.length) return 0;
+        return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+      }
+
+      function formatDuration(hours) {
+        if (!Number.isFinite(hours) || hours <= 0) return "0 h";
+        if (hours < 24) return `${Math.round(hours)} h`;
+
+        const days = hours / 24;
+        if (days < 7) return `${Math.round(days)} jour(s)`;
+
+        const weeks = days / 7;
+        if (weeks < 4) return `${Math.round(weeks)} semaine(s)`;
+
+        const months = days / 30.4375;
+        return `${Math.round(months)} mois`;
+      }
+
+      function averageDuration(values) {
+        return formatDuration(averageRaw(values));
+      }
+
+      function includesAny(value, expected) {
+        const clean = normalize(value);
+        return expected.some((item) => clean.includes(normalize(item)));
+      }
+
+      function equalsAny(value, expected) {
+        const clean = normalize(value);
+        return expected.some((item) => clean === normalize(item));
+      }
+
+      function isBlankOrRas(value) {
+        const clean = normalize(value);
+        return clean === "" || clean === "ras";
+      }
+
+      function containsIsoDate(value, isoDate) {
+        if (!value || !isoDate) return false;
+        const [year, month, day] = isoDate.split("-");
+        const dayNumber = String(Number(day));
+        const monthNumber = String(Number(month));
+        const patterns = [
+          isoDate,
+          `${day}/${month}/${year}`,
+          `${dayNumber}/${monthNumber}/${year}`,
+          `${day}-${month}-${year}`,
+          `${dayNumber}-${monthNumber}-${year}`,
+        ];
+        return patterns.some((pattern) => String(value).includes(pattern));
+      }
+
+      function getCombinedValue(row, columnNames) {
+        const names = Array.isArray(columnNames) ? columnNames : [columnNames];
+        return names.map((name) => getValue(row, name)).join(" ");
+      }
+
+      function classifyInstance(row) {
+        const progress = getValue(row, RULES.columns.instanceProgress);
+        const study = getValue(row, RULES.columns.instanceStudy);
+        const pco = getValue(row, RULES.columns.instancePco);
+        const merged = `${progress} ${study}`;
+
+        if (equalsAny(progress, RULES.statuses.connected)) return "connected";
+        if (includesAny(merged, RULES.statuses.outOfZone)) return "outOfZone";
+        if (includesAny(study, RULES.statuses.withoutPco)) return "withoutPco";
+        if (includesAny(study, RULES.statuses.withPco) || pco) return "withPco";
+        if (includesAny(merged, RULES.statuses.pendingStudy)) return "pendingStudy";
+        return "pendingStudy";
+      }
+
+      function formatNumber(value) {
+        return new Intl.NumberFormat("fr-FR").format(value || 0);
+      }
+
+      function sheetToRows(workbook, wantedName) {
+        const sheetName = workbook.SheetNames.find((name) =>
+          normalize(name).includes(normalize(wantedName))
+        );
+        if (!sheetName) return [];
+        return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+          defval: "",
+          raw: true,
+        });
+      }
+
+      function setMessage(type, text) {
+        message.className = `alert alert-${type} shadow-sm`;
+        message.textContent = text;
+      }
+
+      function setSelectedFile(file) {
+        if (!file) return;
+        state.selectedFileName = file.name;
+        fileLabel.innerText = file.name;
+        setMessage("info", "Lecture du canevas en cours...");
 
         const reader = new FileReader();
-        reader.onload = async (evt) => {
+        reader.onload = (event) => {
           try {
-            const buffer = evt.target.result;
-            let preparedSource = null;
-
-            setLoaderMessage("Lecture optimisée du fichier Excel...");
-            await yieldToUI();
-
-            try {
-              preparedSource = await parseWorkbookInWorker(buffer);
-            } catch (workerError) {
-              console.warn(
-                "Worker indisponible, lecture locale utilisée.",
-                workerError,
-              );
-              const data = new Uint8Array(buffer);
-              const wb = XLSX.read(data, {
-                type: "array",
-                cellDates: true,
-                dense: true,
-              });
-              preparedSource = prepareTrackingSheets(wb);
-            }
-
-            setLoaderMessage("Génération des rapports...");
-            await yieldToUI();
-            await processCityData(preparedSource);
-          } catch (err) {
-            alert("Erreur : " + err.message);
-          } finally {
-            setLoaderMessage("Analyse du canevas en cours...");
-            document.getElementById("loader").style.display = "none";
+            const workbook = XLSX.read(event.target.result, {
+              type: "array",
+              cellDates: true,
+            });
+            const instances = sheetToRows(workbook, RULES.instanceSheet);
+            const connected = sheetToRows(workbook, RULES.connectedSheet);
+            state.workbookRows = { instances, connected };
+            state.reportRows = null;
+            generateBtn.disabled = !instances.length && !connected.length;
+            exportBtn.disabled = true;
+            document.getElementById("reportOutput").innerHTML = "";
+            updateStatusPreview();
+            setMessage(
+              "success",
+              `Canevas charge: ${instances.length} instances et ${connected.length} raccordements detectes.`
+            );
+          } catch (error) {
+            console.error(error);
+            state.workbookRows = null;
+            generateBtn.disabled = true;
+            exportBtn.disabled = true;
+            setMessage("danger", "Impossible de lire le fichier Excel.");
           }
         };
         reader.readAsArrayBuffer(file);
       }
 
-      function formatDate(d) {
-        if (!(d instanceof Date) || isNaN(d.getTime())) return "-";
-        const day = String(d.getDate()).padStart(2, "0");
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const year = d.getFullYear();
-        return `${day}/${month}/${year}`;
+      function handleFile(event) {
+        setSelectedFile(event.target.files?.[0]);
       }
 
-      function toggleAudit() {
-        const panel = document.getElementById("auditPanel");
-        const enabled = document.getElementById("auditToggle")?.checked;
-        panel.classList.toggle("audit-hidden", !enabled);
-        if (enabled && latestAudit) renderAudit(latestAudit);
-      }
+      function updateStatusPreview() {
+        const { instances = [], connected = [] } = state.workbookRows || {};
+        const statusGroups = {};
 
-      function renderAudit(audit) {
-        const body = document.getElementById("auditBody");
-        const notes = document.getElementById("auditNotes");
-        if (!body || !notes || !audit) return;
+        instances.forEach((row) => {
+          const status = getValue(row, RULES.columns.instanceProgress) || "(vide)";
+          if (!statusGroups[status]) statusGroups[status] = [];
+          statusGroups[status].push(row);
+        });
 
-        const rows = [
-          ["Ville détectée", audit.city || "-"],
-          [
-            "Fenêtre semaine",
-            `${formatDate(audit.weekStart)} -> ${formatDate(audit.weekEnd)}`,
-          ],
-          [
-            "Fenêtre reçues (upload)",
-            `${formatDate(audit.recuWindowStart)} -> ${formatDate(audit.recuWindowEnd)}`,
-          ],
-          ["Lignes utiles lues", audit.sourceRows],
-          ["Dossiers INSTANCES uniques", audit.instanceUnique],
-          ["Dossiers RACCORDEMENT uniques", audit.raccordUnique],
-          ["Report (calculé)", audit.report],
-          [
-            "Total clients (Noms, SUIVI INSTANCE)",
-            audit.totalItcActuelFromNoms || 0,
-          ],
-          ["Reçues ITC (calculé)", audit.recu],
-          [
-            "Formule reçues",
-            "reçues = somme des lignes (2 feuilles) où 'Date d'envoi des instances aux prestataires' est entre J-7 et J (date upload)",
-          ],
-          ["Clients raccordés (calculé)", audit.racc],
-          [
-            "Formule raccordés",
-            "raccordés = somme des lignes (SUIVI RACCORDEMENT) où 'Date réelle de raccordement du client' est entre J-7 et J (date upload)",
-          ],
-          ["Total ITC Actuel (calculé)", audit.totalItcActuelFromNoms || 0],
-          [
-            "Formule total ITC actuel",
-            "total ITC actuel = nombre de cellules non vides de la colonne Noms (SUIVI INSTANCE)",
-          ],
-          ["Bloqués (calculé)", audit.bloque],
-          [
-            "Formule bloqués",
-            "bloqués = nombre de cellules contenant 'bloqué' dans la colonne Avancement (SUIVI INSTANCE)",
-          ],
-          ["Raccordement en cours (calculé)", audit.encours || 0],
-          [
-            "Formule raccordement en cours",
-            "raccordement en cours = nombre de cellules contenant 'en cours de raccordement' dans Avancement (SUIVI INSTANCE)",
-          ],
-          ["Reliquat non raccordé (calculé)", audit.reliquatNonRacc],
-          [
-            "Formule reliquat non raccordé",
-            "reliquat non raccordé = raccordement en cours + déploiement PCO + études en cours + implantation PM + sans box huawei",
-          ],
-          [
-            "Formule report",
-            "report = total clients colonne Noms (SUIVI INSTANCE) - reçues (J-7 à J, date upload)",
-          ],
-        ];
-
-        body.innerHTML = rows
-          .map(
-            ([k, v]) => `
-              <tr>
-                <td class="text-start ps-3">${k}</td>
-                <td class="fw-bold">${v}</td>
-              </tr>
-            `,
-          )
+        const html = Object.entries(statusGroups)
+          .sort((a, b) => b[1].length - a[1].length)
+          .map(([status, rows]) => renderStatusDetails(status, rows))
           .join("");
 
-        const joinIds = (arr) => (arr && arr.length ? arr.join(", ") : "Aucun");
-        notes.textContent =
-          `Reçues ITC (échantillon): ${joinIds(audit.sampleRecu)}\n` +
-          `Raccordés (échantillon): ${joinIds(audit.sampleRacc)}\n` +
-          `Bloqués (échantillon): ${joinIds(audit.sampleBloque)}\n` +
-          `Backlog début semaine (échantillon): ${joinIds(audit.sampleBacklog)}`;
+        document.getElementById("statusList").innerHTML =
+          html || "Aucun statut detecte.";
+        document.getElementById("instanceCount").textContent = formatNumber(
+          instances.length
+        );
+        document.getElementById("connectedCount").textContent = formatNumber(
+          connected.length
+        );
       }
 
-      function getReportFilename(ext) {
-        const city = (latestReport?.city || "VILLE").replace(/\s+/g, "_");
-        const today = new Date();
-        const y = today.getFullYear();
-        const m = String(today.getMonth() + 1).padStart(2, "0");
-        const d = String(today.getDate()).padStart(2, "0");
-        return `RAPPORT_ITC_${city}_${y}${m}${d}.${ext}`;
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
       }
 
-      function ensureReportReady() {
-        if (!latestReport) {
-          alert("Aucun rapport à exporter. Téléverse d'abord un canevas.");
-          return false;
-        }
-        return true;
+      function formatDateValue(value) {
+        const date = excelDateToDate(value);
+        if (!date) return escapeHtml(value);
+        return date.toLocaleDateString("fr-FR");
       }
 
-      function exportExcelReport() {
-        if (!ensureReportReady()) return;
-        const wb = XLSX.utils.book_new();
+      function renderStatusDetails(status, rows) {
+        const communes = {};
+        rows.forEach((row) => {
+          const commune =
+            getValue(row, RULES.columns.instanceCommune) || "Commune non renseignee";
+          if (!communes[commune]) communes[commune] = [];
+          communes[commune].push(row);
+        });
 
-        const kpi = latestReport.kpi;
-        const reliquat = latestReport.reliquat;
-        const objectif = latestReport.objectif;
-        const status = latestReport.status;
+        const communeHtml = Object.entries(communes)
+          .sort((a, b) => a[0].localeCompare(b[0], "fr"))
+          .map(([commune, communeRows]) => {
+            const details = communeRows
+              .map(
+                (row) => `
+                  <tr>
+                    <td>${escapeHtml(getValue(row, RULES.columns.instanceRab))}</td>
+                    <td>${escapeHtml(getValue(row, RULES.columns.instanceName))}</td>
+                    <td>${escapeHtml(getValue(row, RULES.columns.instanceContact1))}</td>
+                    <td>${escapeHtml(getValue(row, RULES.columns.instanceContact2))}</td>
+                    <td>${formatDateValue(getValue(row, RULES.columns.instanceSendDate))}</td>
+                  </tr>
+                `
+              )
+              .join("");
 
-        const wsSynthese = XLSX.utils.aoa_to_sheet([
-          ["Ville", latestReport.city],
-          [
-            "Fenêtre",
-            `${formatDate(latestReport.weekStart)} - ${formatDate(latestReport.weekEnd)}`,
-          ],
-          [],
-          ["POINT HEBDO", "Valeur"],
-          ["Report de la semaine dernière", kpi.report],
-          ["Reçues ITC", kpi.recu],
-          ["Total ITC Semaine", kpi.totalItcSemaine],
-          ["Clients raccordés", kpi.raccordes],
-          ["Total ITC Actuel", kpi.totalItcActuel],
-          ["Bloqués", kpi.bloques],
-          ["Reliquat non raccordé", kpi.reliquatNonRacc],
-          [],
-          ["RELIQUATS", "Valeur"],
-          ["Raccordement en cours", reliquat.encours],
-          ["Déploiement PCO", reliquat.pco],
-          ["Études en cours", reliquat.etude],
-          ["Implantation PM", reliquat.pm],
-          ["Sans Box Huawei", reliquat.noBox],
-          ["Total reliquats", reliquat.total],
-          [],
-          ["OBJECTIF", "Valeur"],
-          ["Réalisation semaine", objectif.realisation],
-          ["Objectif Moov", objectif.objectifMoov],
-          ["Taux réalisation", `${objectif.taux.toFixed(2)}%`],
-          [],
-          ["STATUTS SEMAINE", "Valeur"],
-          ["Hors zone", status.horsZone],
-          ["Sans PCO", status.sansPco],
-          ["Avec PCO", status.avecPco],
-          ["Autre DC/DI/INJ", status.autre],
-          ["Étude", status.etude],
-          ["Raccordé", status.raccorde],
-          ["% raccordé/reçus", `${status.pourcentage.toFixed(2)}%`],
-        ]);
-        XLSX.utils.book_append_sheet(wb, wsSynthese, "Synthese");
+            return `
+              <details class="status-commune">
+                <summary>
+                  <span>${escapeHtml(commune)}</span>
+                  <strong>${formatNumber(communeRows.length)}</strong>
+                </summary>
+                <div class="table-responsive mt-2">
+                  <table class="table table-sm table-bordered status-detail-table mb-0">
+                    <thead>
+                      <tr>
+                        <th>Numero RAB</th>
+                        <th>Nom du client</th>
+                        <th>Contact 1</th>
+                        <th>Contact 2</th>
+                        <th>Date d'envoi</th>
+                      </tr>
+                    </thead>
+                    <tbody>${details}</tbody>
+                  </table>
+                </div>
+              </details>
+            `;
+          })
+          .join("");
 
-        const wsDaily = XLSX.utils.aoa_to_sheet([
-          ["Date", "Reçues", "Raccordées"],
-          ...latestReport.daily.labels.map((label, i) => [
-            label,
-            latestReport.daily.recues[i] || 0,
-            latestReport.daily.raccordes[i] || 0,
-          ]),
-        ]);
-        XLSX.utils.book_append_sheet(wb, wsDaily, "Evolution_journaliere");
-
-        const a = latestReport.audit;
-        const wsAudit = XLSX.utils.aoa_to_sheet([
-          ["Règle auditée", "Valeur"],
-          ["Ville détectée", a.city],
-          [
-            "Fenêtre semaine",
-            `${formatDate(a.weekStart)} -> ${formatDate(a.weekEnd)}`,
-          ],
-          ["Lignes utiles lues", a.sourceRows],
-          ["Dossiers INSTANCES uniques", a.instanceUnique],
-          ["Dossiers RACCORDEMENT uniques", a.raccordUnique],
-          ["Report (calculé)", a.report],
-          [
-            "Total clients (Noms, SUIVI INSTANCE)",
-            a.totalItcActuelFromNoms || 0,
-          ],
-          [
-            "Formule report",
-            "report = total clients colonne Noms (SUIVI INSTANCE) - reçues (J-7 à J, date upload)",
-          ],
-          ["Reçues ITC", a.recu],
-          ["Clients raccordés", a.racc],
-          ["Total ITC Actuel", a.totalItcActuelFromNoms || 0],
-          [
-            "Formule total ITC actuel",
-            "total ITC actuel = nombre de cellules non vides de la colonne Noms (SUIVI INSTANCE)",
-          ],
-          ["Bloqués", a.bloque],
-          ["Reliquat non raccordé", a.reliquatNonRacc],
-          [
-            "Formule reliquat non raccordé",
-            "reliquat non raccordé = raccordement en cours + déploiement PCO + études en cours + implantation PM + sans box huawei",
-          ],
-          ["Échantillon Reçues", (a.sampleRecu || []).join(", ")],
-          ["Échantillon Raccordés", (a.sampleRacc || []).join(", ")],
-          ["Échantillon Bloqués", (a.sampleBloque || []).join(", ")],
-          ["Échantillon Backlog", (a.sampleBacklog || []).join(", ")],
-        ]);
-        XLSX.utils.book_append_sheet(wb, wsAudit, "Audit");
-
-        XLSX.writeFile(wb, getReportFilename("xlsx"));
+        return `
+          <details class="status-item">
+            <summary>
+              <span>${escapeHtml(status)}</span>
+              <strong>${formatNumber(rows.length)}</strong>
+            </summary>
+            ${communeHtml}
+          </details>
+        `;
       }
 
-      function exportPdfReport() {
-        if (!ensureReportReady()) return;
-        const jspdf = window.jspdf;
-        if (!jspdf?.jsPDF) {
-          alert("Librairie PDF indisponible. Vérifie la connexion internet.");
-          return;
-        }
-
-        const doc = new jspdf.jsPDF();
-        const r = latestReport;
-        const k = r.kpi;
-
-        doc.setFontSize(14);
-        doc.text(`Rapport ITC - ${r.city}`, 14, 14);
-        doc.setFontSize(10);
-        doc.text(
-          `Fenêtre: ${formatDate(r.weekStart)} - ${formatDate(r.weekEnd)}`,
-          14,
-          20,
-        );
-
-        doc.autoTable({
-          startY: 26,
-          head: [["Point hebdo", "Valeur"]],
-          body: [
-            ["Report de la semaine dernière", k.report],
-            ["Reçues ITC", k.recu],
-            ["Total ITC Semaine", k.totalItcSemaine],
-            ["Clients raccordés", k.raccordes],
-            ["Total ITC Actuel", k.totalItcActuel],
-            ["Bloqués", k.bloques],
-            ["Reliquat non raccordé", k.reliquatNonRacc],
-          ],
-        });
-
-        doc.autoTable({
-          startY: doc.lastAutoTable.finalY + 6,
-          head: [["Statut", "Valeur"]],
-          body: [
-            ["Raccordement en cours", r.reliquat.encours],
-            ["Déploiement PCO", r.reliquat.pco],
-            ["Études en cours", r.reliquat.etude],
-            ["Implantation PM", r.reliquat.pm],
-            ["Sans Box Huawei", r.reliquat.noBox],
-            ["Total", r.reliquat.total],
-          ],
-        });
-
-        doc.autoTable({
-          startY: doc.lastAutoTable.finalY + 6,
-          head: [["Indicateur", "Valeur"]],
-          body: [
-            ["Réalisation semaine", r.objectif.realisation],
-            ["Objectif Moov", r.objectif.objectifMoov],
-            ["Taux réalisation", `${r.objectif.taux.toFixed(2)}%`],
-            ["Hors zone", r.status.horsZone],
-            ["Sans PCO", r.status.sansPco],
-            ["Avec PCO", r.status.avecPco],
-            ["Autre DC/DI/INJ", r.status.autre],
-            ["Étude", r.status.etude],
-            ["Raccordé", r.status.raccorde],
-            ["% raccordé/reçus", `${r.status.pourcentage.toFixed(2)}%`],
-          ],
-        });
-
-        doc.addPage();
-        doc.setFontSize(12);
-        doc.text("Évolution journalière", 14, 14);
-        doc.autoTable({
-          startY: 18,
-          head: [["Date", "Reçues", "Raccordées"]],
-          body: r.daily.labels.map((label, i) => [
-            label,
-            r.daily.recues[i] || 0,
-            r.daily.raccordes[i] || 0,
-          ]),
-        });
-
-        doc.save(getReportFilename("pdf"));
-      }
-
-      function exportPowerPointReport() {
-        if (!ensureReportReady()) return;
-        const PptxGenJS = window.PptxGenJS;
-        if (!PptxGenJS) {
-          alert(
-            "Librairie PowerPoint indisponible. Vérifie la connexion internet.",
-          );
-          return;
-        }
-
-        const r = latestReport;
-        const k = r.kpi;
-        const pptx = new PptxGenJS();
-        pptx.layout = "LAYOUT_WIDE";
-        pptx.author = "ITC Dashboard";
-        pptx.subject = `Rapport ITC ${r.city}`;
-        pptx.title = `Rapport ITC ${r.city}`;
-
-        const chartReliquatsCanvas = document.getElementById("chartReliquats");
-        const chartDailyCanvas = document.getElementById("chartDaily");
-        const reliquatsImg = chartReliquatsCanvas?.toDataURL("image/png");
-        const dailyImg = chartDailyCanvas?.toDataURL("image/png");
-
-        const slide1 = pptx.addSlide();
-        slide1.addText(`Rapport ITC - ${r.city}`, {
-          x: 0.5,
-          y: 0.2,
-          w: 12,
-          h: 0.4,
-          fontSize: 22,
-          bold: true,
-          color: "0A3A7A",
-        });
-        slide1.addText(
-          `Fenêtre: ${formatDate(r.weekStart)} - ${formatDate(r.weekEnd)}`,
-          {
-            x: 0.5,
-            y: 0.62,
-            w: 12,
-            h: 0.3,
-            fontSize: 12,
-            color: "333333",
-          },
-        );
-        slide1.addTable(
-          [
-            [{ text: "Point hebdo" }, { text: "Valeur" }],
-            ["Report de la semaine dernière", String(k.report)],
-            ["Reçues ITC", String(k.recu)],
-            ["Total ITC Semaine", String(k.totalItcSemaine)],
-            ["Clients raccordés", String(k.raccordes)],
-            ["Total ITC Actuel", String(k.totalItcActuel)],
-            ["Bloqués", String(k.bloques)],
-            ["Reliquat non raccordé", String(k.reliquatNonRacc)],
-          ],
-          {
-            x: 0.5,
-            y: 1.0,
-            w: 6.3,
-            h: 3.5,
-            fontSize: 11,
-            border: { type: "solid", color: "D9D9D9", pt: 1 },
-            fill: "FFFFFF",
-          },
-        );
-        slide1.addTable(
-          [
-            [{ text: "Reliquats" }, { text: "Valeur" }],
-            ["Raccordement en cours", String(r.reliquat.encours)],
-            ["Déploiement PCO", String(r.reliquat.pco)],
-            ["Études en cours", String(r.reliquat.etude)],
-            ["Implantation PM", String(r.reliquat.pm)],
-            ["Sans Box Huawei", String(r.reliquat.noBox)],
-            ["Total", String(r.reliquat.total)],
-          ],
-          {
-            x: 7.0,
-            y: 1.0,
-            w: 5.8,
-            h: 3.0,
-            fontSize: 10,
-            border: { type: "solid", color: "D9D9D9", pt: 1 },
-            fill: "FFFFFF",
-          },
-        );
-        if (reliquatsImg) {
-          slide1.addImage({
-            data: reliquatsImg,
-            x: 7.0,
-            y: 4.1,
-            w: 5.8,
-            h: 2.6,
-          });
-        }
-
-        const slide2 = pptx.addSlide();
-        slide2.addText("Répartition Statutaire & Objectif", {
-          x: 0.5,
-          y: 0.2,
-          w: 12,
-          h: 0.4,
-          fontSize: 18,
-          bold: true,
-          color: "0A3A7A",
-        });
-        slide2.addTable(
-          [
-            [{ text: "Indicateur" }, { text: "Valeur" }],
-            ["Réalisation semaine", String(r.objectif.realisation)],
-            ["Objectif Moov", String(r.objectif.objectifMoov)],
-            ["Taux réalisation", `${r.objectif.taux.toFixed(2)}%`],
-            ["Hors zone", String(r.status.horsZone)],
-            ["Sans PCO", String(r.status.sansPco)],
-            ["Avec PCO", String(r.status.avecPco)],
-            ["Autre DC/DI/INJ", String(r.status.autre)],
-            ["Étude", String(r.status.etude)],
-            ["Raccordé", String(r.status.raccorde)],
-            ["% raccordé/reçus", `${r.status.pourcentage.toFixed(2)}%`],
-          ],
-          {
-            x: 0.5,
-            y: 0.9,
-            w: 6.4,
-            h: 4.7,
-            fontSize: 10,
-            border: { type: "solid", color: "D9D9D9", pt: 1 },
-            fill: "FFFFFF",
-          },
-        );
-        if (dailyImg) {
-          slide2.addImage({
-            data: dailyImg,
-            x: 7.1,
-            y: 0.9,
-            w: 5.7,
-            h: 3.2,
-          });
-        }
-        slide2.addTable(
-          [
-            [{ text: "Date" }, { text: "Reçues" }, { text: "Raccordées" }],
-            ...r.daily.labels.map((label, i) => [
-              label,
-              String(r.daily.recues[i] || 0),
-              String(r.daily.raccordes[i] || 0),
-            ]),
-          ],
-          {
-            x: 7.1,
-            y: 4.2,
-            w: 5.7,
-            h: 2.6,
-            fontSize: 8,
-            border: { type: "solid", color: "D9D9D9", pt: 1 },
-            fill: "FFFFFF",
-          },
-        );
-
-        pptx.writeFile({ fileName: getReportFilename("pptx") });
-      }
-
-      function computeForCity(source, targetCity, consolidated = false) {
-        const preparedSheets = Array.isArray(source)
-          ? source
-          : prepareTrackingSheets(source);
-        let detectedCity = "VILLE INCONNUE";
-        let stats = {
-          report: 0,
-          recu: 0,
-          racc: 0,
-          bloque: 0,
-          encours: 0,
-          pco: 0,
-          etude: 0,
-          pm: 0,
-          noBox: 0,
+      function buildReport() {
+        const isoDate = reportDateInput.value;
+        const { instances = [], connected = [] } = state.workbookRows || {};
+        const instanceGroups = {
+          pendingStudy: [],
+          withoutPco: [],
+          withPco: [],
+          outOfZone: [],
         };
-        let bloqueFromAvancement = 0;
-        let totalItcActuelFromNoms = 0;
-        let encoursFromAvancement = 0;
+        const connectedInstanceTodayGroups = { withoutPco: [], withPco: [] };
 
-        const canonicalCity = (value) => normalizeCityName(value);
+        instances.forEach((row) => {
+          const progress = getValue(row, RULES.columns.instanceProgress);
+          const study = getValue(row, RULES.columns.instanceStudy);
+          const problem = getValue(row, RULES.columns.instanceProblem);
+          const isActiveConnection =
+            equalsAny(progress, RULES.statuses.activeConnectionInProgress) ||
+            equalsAny(progress, RULES.statuses.activeConnectionImplantation);
 
-        const records = [];
-        let selectedCity = targetCity || "";
-
-        for (const sheet of preparedSheets) {
-          try {
-            const {
-              name,
-              sN,
-              isMainInstance,
-              isMainRaccord,
-              rows,
-              headerRowIndex,
-            } = sheet;
-            const sheetCity = canonicalCity(sN);
-            if (rows.length < 2) continue;
-
-            let h =
-              sheet.headers ||
-              (rows[headerRowIndex] || []).map((c) => clean(c));
-
-            const mappedIndex = (field, heur) => heur(h);
-
-            let iVille = mappedIndex("ville", (h) => findVilleColumnIndex(h));
-            let iEnvoi = mappedIndex("envoi", (h) =>
-              h.findIndex(
-                (c) =>
-                  (c || "").includes("ENVOI") ||
-                  (c || "").includes("ENVOIE") ||
-                  (c || "").includes("DATE"),
-              ),
-            );
-            let iRacc = mappedIndex("racc", (h) =>
-              h.findIndex(
-                (c) =>
-                  (c || "").includes("REELLE") ||
-                  (c || "").includes("RACCORDEMENT") ||
-                  (c || "").includes("RAC"),
-              ),
-            );
-            let iPrev = mappedIndex("prev", (h) =>
-              h.findIndex(
-                (c) =>
-                  (c || "").includes("PREVISIONNELLE") ||
-                  (c || "").includes("PREVISION"),
-              ),
-            );
-            let iAvance = mappedIndex("avance", (h) =>
-              h.findIndex(
-                (c) =>
-                  (c || "").includes("AVANCE") ||
-                  (c || "").includes("AVANCEMENT") ||
-                  (c || "").includes("STATUS"),
-              ),
-            );
-            let iStatut = mappedIndex("statut", (h) =>
-              h.findIndex(
-                (c) =>
-                  (c || "").includes("STATUT") || (c || "").includes("STATUS"),
-              ),
-            );
-            let iEtudeTechnique = mappedIndex("etudeTechnique", (h) =>
-              h.findIndex(
-                (c) =>
-                  (c || "").includes("ETUDE") ||
-                  (c || "").includes("ETUDETECHNIQUE"),
-              ),
-            );
-            let iProbleme = mappedIndex("probleme", (h) =>
-              h.findIndex(
-                (c) =>
-                  (c || "").includes("PROBLEME") || (c || "").includes("PROBL"),
-              ),
-            );
-            let iEntreprise = mappedIndex("entreprise", (h) =>
-              h.findIndex(
-                (c) =>
-                  (c || "").includes("ENTREPRISE") ||
-                  (c || "").includes("SOCIETE") ||
-                  (c || "").includes("PRESTATAIRE"),
-              ),
-            );
-            let iNoms = mappedIndex("noms", (h) =>
-              h.findIndex(
-                (c) =>
-                  c === "NOMS" ||
-                  (c || "").includes("NOMS") ||
-                  (c || "").includes("NOM"),
-              ),
-            );
-            const idIndexes = (function (h) {
-              const candidates = h
-                .map((c, idx) => ({ c, idx }))
-                .filter(
-                  ({ c }) =>
-                    c.includes("ABONNEMENT") ||
-                    c.includes("NUMERO") ||
-                    c.includes("MSISDN") ||
-                    c.includes("DOSSIER") ||
-                    c.includes("REFERENCE") ||
-                    c === "REF" ||
-                    c.includes("CLIENT") ||
-                    c.includes("CONTACT") ||
-                    c.includes("TEL") ||
-                    c.includes("TELEPHONE"),
-                )
-                .map(({ idx }) => idx);
-              // If user mapped an explicit id column, prefer it
-              // no user-provided column mapping: use detected candidates
-              return candidates;
-            })(h);
-
-            const cellAt = (row, idx) => (idx >= 0 ? row[idx] : null);
-
-            for (let i = headerRowIndex + 1; i < rows.length; i++) {
-              let r = rows[i];
-              if (!Array.isArray(r)) continue;
-              const rowCity = iVille >= 0 ? r[iVille] : "";
-              const rowCityCanonical = canonicalCity(rowCity);
-              if (!selectedCity && rowCityCanonical)
-                selectedCity = rowCityCanonical;
-              if (!consolidated && selectedCity) {
-                if (!rowCityCanonical || rowCityCanonical !== selectedCity)
-                  continue;
-              }
-
-              const dossierKey = idIndexes
-                .map((idx) => normalizeIdValue(cellAt(r, idx)))
-                .filter(Boolean)
-                .join("|");
-              const hasAboValue = dossierKey.length > 0;
-              const vEnvoi = cellAt(r, iEnvoi);
-              const vRacc = cellAt(r, iRacc);
-              const vPrev = cellAt(r, iPrev);
-              const vAvance = cellAt(r, iAvance);
-              const vStatut = cellAt(r, iStatut);
-              const vEtudeTechnique = cellAt(r, iEtudeTechnique);
-              const vProbleme = cellAt(r, iProbleme);
-              const vEntreprise = cellAt(r, iEntreprise);
-              const vNoms = cellAt(r, iNoms);
-
-              const dEnv = parseDate(vEnvoi);
-              const dRac = parseDate(vRacc);
-              const dPrev = parseDate(vPrev);
-              const status = clean(vAvance || vStatut);
-              const avancement = clean(vAvance);
-              const statutCol = clean(vStatut);
-              const etudeTechniqueCol = clean(vEtudeTechnique);
-              const problemeCol = clean(vProbleme);
-              const sansPcoSignal = isMainInstance
-                ? (etudeTechniqueCol || "").includes("SANSPCO") ||
-                  (etudeTechniqueCol || "").includes("SANS PCO")
-                : isMainRaccord
-                  ? (statutCol || "").includes("SANSPCO") ||
-                    (statutCol || "").includes("SANS PCO")
-                  : false;
-              const autreKeywords = [
-                "INDISPONIBLE",
-                "INJOIGNABLE",
-                "DESISTEMENT",
-                "NUMEROINCORRECT",
-              ];
-              const autreSignal =
-                isMainInstance &&
-                iProbleme >= 0 &&
-                autreKeywords.some((keyword) =>
-                  (problemeCol || "").includes(keyword),
-                );
-
-              if (
-                isMainInstance &&
-                iAvance >= 0 &&
-                (avancement || "").includes("BLOQ")
-              ) {
-                bloqueFromAvancement += 1;
-              }
-              if (
-                isMainInstance &&
-                iAvance >= 0 &&
-                (avancement || "").includes("RACCORDEMENT") &&
-                (avancement || "").includes("ENCOURS")
-              ) {
-                encoursFromAvancement += 1;
-              }
-              if (isMainInstance && iNoms >= 0 && clean(vNoms).length > 0) {
-                totalItcActuelFromNoms += 1;
-              }
-
-              const hasUsefulData =
-                !!dEnv || !!dRac || !!dPrev || !!status || hasAboValue;
-              if (!hasUsefulData) continue;
-
-              if (detectedCity === "VILLE INCONNUE" && rowCityCanonical) {
-                detectedCity = rowCityCanonical;
-              }
-
-              records.push({
-                sN,
-                dossierKey,
-                dEnv,
-                dRac,
-                dPrev,
-                status,
-                avancement,
-                etudeTechnique: etudeTechniqueCol,
-                probleme: problemeCol,
-                sansPcoSignal,
-                autreSignal,
-                entreprise: clean(vEntreprise),
-                rowIndex: i,
-              });
+          if (equalsAny(progress, ["reprise etude en cours"])) {
+            instanceGroups.pendingStudy.push(row);
+          }
+          if (
+            isActiveConnection &&
+            equalsAny(study, RULES.statuses.withoutPco) &&
+            containsIsoDate(
+              getCombinedValue(row, RULES.columns.instanceComments),
+              isoDate
+            )
+          ) {
+            instanceGroups.withoutPco.push(row);
+          }
+          if (
+            isActiveConnection &&
+            equalsAny(study, RULES.statuses.withPco) &&
+            containsIsoDate(
+              getCombinedValue(row, RULES.columns.instanceComments),
+              isoDate
+            )
+          ) {
+            instanceGroups.withPco.push(row);
+          }
+          if (
+            equalsAny(problem, RULES.statuses.outOfZone) &&
+            containsIsoDate(
+              getCombinedValue(row, RULES.columns.instanceComments),
+              isoDate
+            )
+          ) {
+            instanceGroups.outOfZone.push(row);
+          }
+          if (
+            equalsAny(progress, RULES.statuses.connected) &&
+            sameDay(getValue(row, RULES.columns.instanceConnectionDate), isoDate)
+          ) {
+            if (equalsAny(study, RULES.statuses.withoutPco)) {
+              connectedInstanceTodayGroups.withoutPco.push(row);
             }
-          } catch (e) {
-            console.error("Error processing sheet", name, e);
-            try {
-              alert(
-                "Erreur lors du traitement de la feuille " +
-                  name +
-                  ": " +
-                  (e && e.message ? e.message : e),
-              );
-            } catch (_) {}
-            continue;
+            if (equalsAny(study, RULES.statuses.withPco)) {
+              connectedInstanceTodayGroups.withPco.push(row);
+            }
           }
-        }
-
-        const instanceMap = new Map();
-        const pickLatestByEnv = (current, incoming) => {
-          if (!current) return incoming;
-          const cDate = current.dEnv instanceof Date ? current.dEnv : null;
-          const iDate = incoming.dEnv instanceof Date ? incoming.dEnv : null;
-          if (cDate && iDate) return iDate >= cDate ? incoming : current;
-          if (!cDate && iDate) return incoming;
-          if (cDate && !iDate) return current;
-          return incoming.rowIndex >= current.rowIndex ? incoming : current;
-        };
-
-        records.forEach((rec) => {
-          if (!isInstanceSheetName(rec.sN)) return;
-          const key = rec.dossierKey || `INST-${rec.rowIndex}`;
-          instanceMap.set(key, pickLatestByEnv(instanceMap.get(key), rec));
         });
 
-        const raccordMap = new Map();
-        records.forEach((rec) => {
-          if (!isRaccordSheetName(rec.sN)) return;
-          const key = rec.dossierKey || `RACC-${rec.rowIndex}`;
-          if (!raccordMap.has(key)) {
-            raccordMap.set(key, {
-              maxEnv: rec.dEnv || null,
-              firstEnv: rec.dEnv || null,
-              maxRac: rec.dRac || null,
-              firstRac: rec.dRac || null,
-              statuses: new Set(rec.status ? [rec.status] : []),
-            });
-            return;
-          }
-
-          const agg = raccordMap.get(key);
-          if (rec.dEnv instanceof Date) {
-            if (!(agg.maxEnv instanceof Date) || rec.dEnv > agg.maxEnv)
-              agg.maxEnv = rec.dEnv;
-            if (!(agg.firstEnv instanceof Date) || rec.dEnv < agg.firstEnv)
-              agg.firstEnv = rec.dEnv;
-          }
-          if (rec.dRac instanceof Date) {
-            if (!(agg.maxRac instanceof Date) || rec.dRac > agg.maxRac)
-              agg.maxRac = rec.dRac;
-            if (!(agg.firstRac instanceof Date) || rec.dRac < agg.firstRac)
-              agg.firstRac = rec.dRac;
-          }
-          if (rec.status) agg.statuses.add(rec.status);
-        });
-
-        // Allow user to override upload date (date J) via UI control
-        let recuWindowEnd = new Date();
-        const uploadDateStr = document.getElementById("uploadDateInput")?.value;
-        if (uploadDateStr) {
-          const parsed = parseDate(uploadDateStr);
-          if (parsed) recuWindowEnd = parsed;
-        }
-        recuWindowEnd.setHours(0, 0, 0, 0);
-        const recuWindowStart = new Date(recuWindowEnd);
-        recuWindowStart.setDate(recuWindowEnd.getDate() - 7);
-
-        const weekEnd = new Date(recuWindowEnd);
-        const weekStart = new Date(recuWindowStart);
-        const campaignYear = weekEnd.getFullYear();
-
-        const inWindow = (d) =>
-          d instanceof Date && d >= weekStart && d <= weekEnd;
-        const inRecuWindow = (d) =>
-          d instanceof Date && d >= recuWindowStart && d <= recuWindowEnd;
-
-        const raccordEntries = Array.from(raccordMap.entries());
-        const receivedThisWeekEntries = raccordEntries.filter(([, v]) =>
-          inWindow(v.maxEnv),
-        );
-        const connectedThisWeekEntries = raccordEntries.filter(([, v]) =>
-          inWindow(v.maxRac),
+        const connectedInstanceToday = instances.filter(
+          (row) =>
+            equalsAny(
+              getValue(row, RULES.columns.instanceProgress),
+              RULES.statuses.connected
+            ) &&
+            sameDay(getValue(row, RULES.columns.instanceConnectionDate), isoDate)
         );
 
-        const receivedByEnvoiRows = records.filter((rec) =>
-          inRecuWindow(rec.dEnv),
-        );
-        const connectedByRaccordementRows = records.filter(
-          (rec) =>
-            isRaccordSheetName(rec.sN) && inRecuWindow(rec.dRac),
-        );
-        stats.recu = receivedByEnvoiRows.length;
-        stats.racc = connectedByRaccordementRows.length;
-
-        const blockedEntries = Array.from(instanceMap.entries());
-        const blockedPopulation = blockedEntries.map(([, v]) => v);
-        stats.bloque = bloqueFromAvancement;
-
-        const backlogEntries = raccordEntries.filter(
-          ([, v]) =>
-            v.firstEnv instanceof Date &&
-            v.firstEnv.getFullYear() === campaignYear &&
-            v.firstEnv <= weekStart &&
-            (!(v.firstRac instanceof Date) || v.firstRac >= weekStart),
-        );
-        const reliquatNonRaccCalc = backlogEntries.length;
-
-        stats.report = Math.max(0, totalItcActuelFromNoms - stats.recu);
-        stats.totalItcActuelFromNoms = totalItcActuelFromNoms;
-
-        stats.pm = blockedPopulation.filter(
-          (v) =>
-            (v.status || "").includes("PM") ||
-            (v.status || "").includes("IMPLANT"),
-        ).length;
-        stats.noBox = blockedPopulation.filter(
-          (v) =>
-            (v.status || "").includes("BOX") ||
-            (v.status || "").includes("SANSBOX") ||
-            (v.status || "").includes("SANSBOXHUAWEI"),
-        ).length;
-
-        // Reliquats demandés: compter uniquement depuis la colonne Avancement (SUIVI INSTANCE)
-        stats.etude = records.filter((rec) => {
-          if (!(rec.sN || "").includes("INSTANCE")) return false;
-          const a = String(rec.avancement || "");
-          return a.includes("ETUDE") && a.includes("ENCOURS");
-        }).length;
-        stats.pco = records.filter((rec) => {
-          if (!(rec.sN || "").includes("INSTANCE")) return false;
-          const a = String(rec.avancement || "");
-          return a.includes("DEPLOIEMENT") && a.includes("PCO");
-        }).length;
-        stats.encours = encoursFromAvancement;
-        stats.reliquatNonRaccFromColumns =
-          stats.encours + stats.pco + stats.etude + stats.pm + stats.noBox;
-
-        const days = [];
-        for (
-          let d = new Date(weekStart);
-          d <= weekEnd;
-          d.setDate(d.getDate() + 1)
-        ) {
-          days.push(new Date(d));
-        }
-
-        const dayCount = (entries, pickDate) =>
-          days.map(
-            (day) =>
-              entries.filter(([, val]) => {
-                const dt = pickDate(val);
-                return dt instanceof Date && dt.getTime() === day.getTime();
-              }).length,
+        const instanceConnectionDelay = (rows) =>
+          rows.map((row) =>
+            hoursBetweenValues(
+              getValue(row, RULES.columns.instanceDate),
+              getValue(row, RULES.columns.instanceConnectionDate)
+            )
           );
-
-        const dailyDetails = {
-          labels: days.map(
-            (d) =>
-              `${String(d.getDate()).padStart(2, "0")}/${String(
-                d.getMonth() + 1,
-              ).padStart(2, "0")}`,
-          ),
-          recues: dayCount(raccordEntries, (v) => v.maxEnv),
-          raccordes: dayCount(raccordEntries, (v) => v.maxRac),
-        };
-
-        const statusText = ([, v]) => Array.from(v.statuses || []).join(" ");
-        const sansPcoFromReceivedWeek = receivedByEnvoiRows.filter(
-          (rec) => !!rec.sansPcoSignal,
-        ).length;
-        const autreFromReceivedWeek = receivedByEnvoiRows.filter(
-          (rec) => !!rec.autreSignal,
-        ).length;
-        const statusDetails = {
-          horsZone: receivedThisWeekEntries.filter((entry) =>
-            statusText(entry).includes("HORS ZONE"),
-          ).length,
-          sansPco: sansPcoFromReceivedWeek,
-          avecPco: receivedThisWeekEntries.filter((entry) => {
-            const s = statusText(entry);
-            return (
-              s.includes("PCO") &&
-              !s.includes("SANS PCO") &&
-              !s.includes("SANSPCO") &&
-              !s.includes("ETUDE")
+        const instanceWaitingDelay = (rows) =>
+          rows.map((row) => {
+            const days = daysBetween(
+              getValue(row, RULES.columns.instanceSendDate),
+              isoDate
             );
-          }).length,
-          autre: autreFromReceivedWeek,
-          etude: receivedThisWeekEntries.filter((entry) =>
-            statusText(entry).includes("ETUDE"),
-          ).length,
-          raccorde: stats.racc,
-          pourcentage: stats.recu > 0 ? (stats.racc / stats.recu) * 100 : 0,
-        };
-
-        const details = {
-          objectif: {
-            realisation: stats.racc,
-            objectifMoov: 600,
-            taux: 600 > 0 ? (stats.racc / 600) * 100 : 0,
-          },
-          daily: dailyDetails,
-          status: statusDetails,
-        };
-
-        detectedCity = selectedCity || detectedCity;
-
-        const sampleIds = (entries) =>
-          entries
-            .slice(0, 8)
-            .map(([k]) => k)
-            .filter(Boolean);
-        const sampleRecuRows = receivedByEnvoiRows
-          .slice(0, 8)
-          .map((rec) => rec.dossierKey || `${rec.sN}#${rec.rowIndex}`)
-          .filter(Boolean);
-        const sampleRaccRows = connectedByRaccordementRows
-          .slice(0, 8)
-          .map((rec) => rec.dossierKey || `${rec.sN}#${rec.rowIndex}`)
-          .filter(Boolean);
-
-        const audit = {
-          city: detectedCity,
-          weekStart,
-          weekEnd,
-          sourceRows: records.length,
-          instanceUnique: instanceMap.size,
-          raccordUnique: raccordMap.size,
-          recuWindowStart,
-          recuWindowEnd,
-          report: stats.report,
-          totalItcActuelFromNoms,
-          recu: stats.recu,
-          racc: stats.racc,
-          bloque: stats.bloque,
-          encours: stats.encours,
-          reliquatNonRacc: stats.reliquatNonRaccFromColumns,
-          sampleRecu: sampleRecuRows,
-          sampleRacc: sampleRaccRows,
-          sampleBloque: sampleIds(blockedEntries),
-          sampleBacklog: sampleIds(backlogEntries),
-        };
-
-        return { city: detectedCity, stats, audit, details };
-      }
-
-      function detectCities(source) {
-        return extractCitiesFromVilleColumns(source);
-      }
-
-      async function processCityData(source) {
-        const preparedSheets = Array.isArray(source)
-          ? source
-          : prepareTrackingSheets(source);
-        const mergedCities = detectCities(preparedSheets);
-        const groupedSheetsByCity = buildPreparedSheetsByCity(
-          preparedSheets,
-          mergedCities,
-        );
-
-        // If user requested consolidated aggregation, compute a single consolidated report
-        if (treatConsolidated) {
-          const consolidated = computeForCity(preparedSheets, "", true);
-          if (consolidated) {
-            const cityLabel = "CONSOLIDE";
-            latestReportsAll = { [cityLabel]: consolidated };
-            latestAudit = consolidated.audit || null;
-            latestReport = {
-              city: cityLabel,
-              weekStart: consolidated.audit?.weekStart || null,
-              weekEnd: consolidated.audit?.weekEnd || null,
-              kpi: {
-                report: consolidated.stats.report,
-                recu: consolidated.stats.recu,
-                totalItcSemaine:
-                  (consolidated.stats.report || 0) +
-                  (consolidated.stats.recu || 0),
-                raccordes: consolidated.stats.racc,
-                totalItcActuel: consolidated.audit?.totalItcActuelFromNoms || 0,
-                bloques: consolidated.stats.bloque,
-                reliquatNonRacc: consolidated.audit?.reliquatNonRacc || 0,
-              },
-              reliquat: {
-                encours: consolidated.stats.encours,
-                pco: consolidated.stats.pco,
-                etude: consolidated.stats.etude,
-                pm: consolidated.stats.pm,
-                noBox: consolidated.stats.noBox,
-                total: consolidated.audit?.reliquatNonRacc || 0,
-              },
-              objectif: consolidated.details?.objectif || {},
-              daily: consolidated.details?.daily || {},
-              status: consolidated.details?.status || {},
-              audit: consolidated.audit || null,
-            };
-            // hide multi-city controls
-            const sel = document.getElementById("citySelect");
-            if (sel) sel.style.display = "none";
-            const exportAllBtn = document.getElementById("exportAllBtn");
-            if (exportAllBtn) exportAllBtn.style.display = "none";
-            renderUI(
-              cityLabel,
-              consolidated.stats,
-              consolidated.audit,
-              consolidated.details,
+            return days === null ? null : days * 24;
+          });
+        const instanceCanvasConnectionDelay = (rows) =>
+          rows.map((row) => {
+            const canvasDelay = Number(getValue(row, RULES.columns.instanceDelay));
+            if (Number.isFinite(canvasDelay)) return canvasDelay * 24;
+            return hoursBetweenValues(
+              getValue(row, RULES.columns.instanceSendDate) ||
+                getValue(row, RULES.columns.instanceDate),
+              getValue(row, RULES.columns.instanceConnectionDate)
             );
-          }
-          return;
-        }
-
-        if (!mergedCities || mergedCities.length === 0) {
-          // fallback: compute as before (single city auto-detect)
-          const single = computeForCity(preparedSheets, "");
-          if (single) {
-            latestReportsAll = { [single.city || "VILLE"]: single };
-            latestReport = {
-              city: single.city,
-              weekStart: single.audit?.weekStart || null,
-              weekEnd: single.audit?.weekEnd || null,
-              kpi: {
-                report: single.stats.report,
-                recu: single.stats.recu,
-                totalItcSemaine:
-                  (single.stats.report || 0) + (single.stats.recu || 0),
-                raccordes: single.stats.racc,
-                totalItcActuel: single.audit?.totalItcActuelFromNoms || 0,
-                bloques: single.stats.bloque,
-                reliquatNonRacc: single.audit?.reliquatNonRacc || 0,
-              },
-              reliquat: {
-                encours: single.stats.encours,
-                pco: single.stats.pco,
-                etude: single.stats.etude,
-                pm: single.stats.pm,
-                noBox: single.stats.noBox,
-                total: single.audit?.reliquatNonRacc || 0,
-              },
-              objectif: single.details?.objectif || {},
-              daily: single.details?.daily || {},
-              status: single.details?.status || {},
-              audit: single.audit || null,
-            };
-            latestAudit = single.audit || null;
-            renderUI(single.city, single.stats, single.audit, single.details);
-          }
-          return;
-        }
-
-        // Set default value of uploadDateInput to today if empty
-        try {
-          const up = document.getElementById("uploadDateInput");
-          if (up && !up.value) {
-            const t = new Date();
-            up.value = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
-          }
-        } catch (e) {}
-
-        // If we detected exactly one city from mergedCities, treat it like a single-city upload
-        if (mergedCities.length === 1) {
-          const singleCity = mergedCities[0];
-          const single = computeForCity(
-            groupedSheetsByCity[singleCity] || preparedSheets,
-            singleCity,
-          );
-          if (single) {
-            latestReportsAll = { [single.city || singleCity]: single };
-            // hide multi-city controls
-            const sel = document.getElementById("citySelect");
-            if (sel) sel.style.display = "none";
-            const exportAllBtn = document.getElementById("exportAllBtn");
-            if (exportAllBtn) exportAllBtn.style.display = "none";
-
-            latestAudit = single.audit || null;
-            latestReport = {
-              city: single.city,
-              weekStart: single.audit?.weekStart || null,
-              weekEnd: single.audit?.weekEnd || null,
-              kpi: {
-                report: single.stats.report,
-                recu: single.stats.recu,
-                totalItcSemaine:
-                  (single.stats.report || 0) + (single.stats.recu || 0),
-                raccordes: single.stats.racc,
-                totalItcActuel: single.audit?.totalItcActuelFromNoms || 0,
-                bloques: single.stats.bloque,
-                reliquatNonRacc: single.audit?.reliquatNonRacc || 0,
-              },
-              reliquat: {
-                encours: single.stats.encours,
-                pco: single.stats.pco,
-                etude: single.stats.etude,
-                pm: single.stats.pm,
-                noBox: single.stats.noBox,
-                total: single.audit?.reliquatNonRacc || 0,
-              },
-              objectif: single.details?.objectif || {},
-              daily: single.details?.daily || {},
-              status: single.details?.status || {},
-              audit: single.audit || null,
-            };
-            renderUI(single.city, single.stats, single.audit, single.details);
-          }
-          return;
-        }
-
-        // multiple cities detected: compute for each (preserve rules in computeForCity)
-        const reports = {};
-        for (let i = 0; i < mergedCities.length; i++) {
-          const c = mergedCities[i];
-          setLoaderMessage(
-            `Analyse des villes ${i + 1}/${mergedCities.length} : ${c}`,
-          );
-          await yieldToUI();
-
-          const res = computeForCity(
-            groupedSheetsByCity[c] || preparedSheets,
-            c,
-          );
-          if (res) {
-            reports[c] = {
-              city: res.city,
-              stats: res.stats,
-              audit: res.audit,
-              details: res.details,
-            };
-          }
-        }
-        latestReportsAll = reports;
-
-        // populate selector
-        const sel = document.getElementById("citySelect");
-        sel.innerHTML = Object.keys(reports)
-          .map((k) => `<option value="${k}">${k}</option>`)
-          .join("");
-        sel.style.display = "inline-block";
-        document.getElementById("exportAllBtn").style.display = "inline-block";
-
-        // show first city by default
-        const first = Object.keys(reports)[0];
-        if (first) onCityChange(first);
-      }
-
-      function onCityChange(city) {
-        if (!latestReportsAll || !latestReportsAll[city]) return;
-        const rep = latestReportsAll[city];
-        latestAudit = rep.audit || null;
-        latestReport = {
-          city: rep.city,
-          weekStart: rep.audit?.weekStart || null,
-          weekEnd: rep.audit?.weekEnd || null,
-          kpi: {
-            report: rep.stats.report,
-            recu: rep.stats.recu,
-            totalItcSemaine: (rep.stats.report || 0) + (rep.stats.recu || 0),
-            raccordes: rep.stats.racc,
-            totalItcActuel: rep.audit?.totalItcActuelFromNoms || 0,
-            bloques: rep.stats.bloque,
-            reliquatNonRacc: rep.audit?.reliquatNonRacc || 0,
-          },
-          reliquat: {
-            encours: rep.stats.encours,
-            pco: rep.stats.pco,
-            etude: rep.stats.etude,
-            pm: rep.stats.pm,
-            noBox: rep.stats.noBox,
-            total: rep.audit?.reliquatNonRacc || 0,
-          },
-          objectif: rep.details?.objective || rep.details?.objectif || {},
-          daily: rep.details?.daily || {},
-          status: rep.details?.status || {},
-          audit: rep.audit || null,
-        };
-        renderUI(rep.city, rep.stats, rep.audit, rep.details);
-      }
-
-      function exportAllExcel() {
-        if (!latestReportsAll)
-          return alert("Aucun rapport multi-ville disponible.");
-        const wb = XLSX.utils.book_new();
-        Object.keys(latestReportsAll).forEach((city) => {
-          const r = latestReportsAll[city];
-          const kpi = {
-            report: r.stats.report,
-            recu: r.stats.recu,
-            totalItcSemaine: (r.stats.report || 0) + (r.stats.recu || 0),
-            raccordes: r.stats.racc,
-            totalItcActuel: r.audit?.totalItcActuelFromNoms || 0,
-            bloques: r.stats.bloque,
-            reliquatNonRacc: r.audit?.reliquatNonRacc || 0,
-          };
-          const reliquat = {
-            encours: r.stats.encours,
-            pco: r.stats.pco,
-            etude: r.stats.etude,
-            pm: r.stats.pm,
-            noBox: r.stats.noBox,
-            total: r.audit?.reliquatNonRacc || 0,
-          };
-
-          const wsSynthese = XLSX.utils.aoa_to_sheet([
-            ["Ville", city],
-            [
-              "Fenêtre",
-              `${formatDate(r.audit?.weekStart)} - ${formatDate(r.audit?.weekEnd)}`,
-            ],
-            [],
-            ["POINT HEBDO", "Valeur"],
-            ["Report de la semaine dernière", kpi.report],
-            ["Reçues ITC", kpi.recu],
-            ["Total ITC Semaine", kpi.totalItcSemaine],
-            ["Clients raccordés", kpi.raccordes],
-            ["Total ITC Actuel", kpi.totalItcActuel],
-            ["Bloqués", kpi.bloques],
-            ["Reliquat non raccordé", kpi.reliquatNonRacc],
-          ]);
-          XLSX.utils.book_append_sheet(wb, wsSynthese, `Synthese_${city}`);
-        });
-        XLSX.writeFile(
-          wb,
-          `RAPPORT_ITC_ToutesVilles_${new Date().toISOString().slice(0, 10)}.xlsx`,
-        );
-      }
-      function renderUI(city, s, audit, details) {
-        document.getElementById("villeLabel").innerText = "VILLE : " + city;
-        document.getElementById("mainDashboard").style.display = "block";
-        latestAudit = audit || null;
-        if (document.getElementById("auditToggle")?.checked && latestAudit) {
-          renderAudit(latestAudit);
-        }
-
-        // Calculs selon tes règles strictes
-        const report = s.report; // 1064 pour Abidjan / 66 pour Divo
-        const recu = s.recu; // Reçus de la semaine
-        const totalItcSemaine = report + recu; // Somme des deux
-        const raccordes = s.racc; // Raccordés de la semaine
-        const totalItcActuel =
-          s.totalItcActuelFromNoms ?? totalItcSemaine - raccordes;
-        const bloques = s.bloque; // Statut "Bloqué"
-        const reliquatNonRacc =
-          s.reliquatNonRaccFromColumns ?? Math.max(0, totalItcActuel - bloques);
-
-        latestReport = {
-          city,
-          weekStart: audit?.weekStart || null,
-          weekEnd: audit?.weekEnd || null,
-          kpi: {
-            report,
-            recu,
-            totalItcSemaine,
-            raccordes,
-            totalItcActuel,
-            bloques,
-            reliquatNonRacc,
-          },
-          reliquat: {
-            encours: s.encours,
-            pco: s.pco,
-            etude: s.etude,
-            pm: s.pm,
-            noBox: s.noBox,
-            total: reliquatNonRacc,
-          },
-          objectif: details?.objectif || {
-            realisation: 0,
-            objectifMoov: 600,
-            taux: 0,
-          },
-          daily: details?.daily || { labels: [], recues: [], raccordes: [] },
-          status: details?.status || {
-            horsZone: 0,
-            sansPco: 0,
-            avecPco: 0,
-            autre: 0,
-            etude: 0,
-            raccorde: 0,
-            pourcentage: 0,
-          },
-          audit: audit || null,
-        };
-
-        const hb = document.getElementById("hebdoBody");
-
-        // Ordre d'affichage imposé
-        const rows = [
-          { label: "Report de la semaine dernière", val: report, class: "" },
-          { label: "Reçues ITC", val: recu, class: "table-info" },
+          });
+        const recruitment = [
           {
-            label: "Total ITC Semaine",
-            val: totalItcSemaine,
-            class: "fw-bold",
-          },
-          {
-            label: "Clients raccordés",
-            val: raccordes,
-            class: "text-success fw-bold",
-          },
-          {
-            label: "Total ITC Actuel",
-            val: totalItcActuel,
-            class: "table-warning fw-bold",
-          },
-          { label: "Bloqués", val: bloques, class: "text-danger" },
-          {
-            label: "Reliquat non raccordé",
-            val: reliquatNonRacc,
-            class: "bg-itc-dark text-white",
+            Date: isoDate,
+            "Commandes du Jour": instances.filter((row) =>
+              sameDay(
+                getValue(row, RULES.columns.instanceSendDate),
+                isoDate
+              )
+            ).length,
+            "Raccordement du Jour": instances.filter((row) =>
+              equalsAny(
+                getValue(row, RULES.columns.instanceProgress),
+                RULES.statuses.connected
+              ) &&
+              sameDay(
+                getValue(row, RULES.columns.instanceConnectionDate),
+                isoDate
+              )
+            ).length,
+            "Cumul Instances en Etude": instanceGroups.pendingStudy.length,
+            "Cumul Instances Sans PCO": instanceGroups.withoutPco.length,
+            "Cumul Instances Avec PCO": instanceGroups.withPco.length,
+            "Cumul Instances Hors Zone": instanceGroups.outOfZone.length,
+            Total:
+              instanceGroups.pendingStudy.length +
+              instanceGroups.withoutPco.length +
+              instanceGroups.withPco.length +
+              instanceGroups.outOfZone.length,
           },
         ];
 
-        hb.innerHTML = rows
+        const waiting = [
+          {
+            Date: isoDate,
+            "Instances Sans PCO - Cumul": instanceGroups.withoutPco.length,
+            "Instances Sans PCO - Delai Moyen":
+              averageDuration(instanceWaitingDelay(instanceGroups.withoutPco)),
+            "Instances Avec PCO - Cumul": instanceGroups.withPco.length,
+            "Instances Avec PCO - Delai Moyen":
+              averageDuration(
+                instanceConnectionDelay(connectedInstanceTodayGroups.withPco)
+              ),
+          },
+        ];
+
+        const sansPcoDelay = instanceConnectionDelay(
+          connectedInstanceTodayGroups.withoutPco
+        );
+        const avecPcoDelay = instanceConnectionDelay(
+          connectedInstanceTodayGroups.withPco
+        );
+        const production = [
+          {
+            Date: isoDate,
+            "Raccordement du Jour": connectedInstanceToday.length,
+            "Clients raccordes Sans PCO":
+              connectedInstanceTodayGroups.withoutPco.length,
+            "Sans PCO - Delai Moyen": averageDuration(sansPcoDelay),
+            "Clients raccordes Avec PCO":
+              connectedInstanceTodayGroups.withPco.length,
+            "Avec PCO - Delai Moyen": averageDuration(avecPcoDelay),
+            "Delai Moyen de raccordement": averageDuration(
+              instanceCanvasConnectionDelay(connectedInstanceToday)
+            ),
+          },
+        ];
+
+        return { recruitment, waiting, production };
+      }
+
+      function renderTable(title, rows) {
+        const columns = Object.keys(rows[0] || {});
+        const head = columns.map((column) => `<th>${column}</th>`).join("");
+        const body = rows
           .map(
-            (r) => `
-            <tr class="${r.class}">
-                <td class="text-start ps-4">${r.label}</td>
-                <td class="fs-5 fw-bold">${r.val}</td>
-            </tr>
-        `,
+            (row) =>
+              `<tr>${columns
+                .map((column) => `<td>${formatCell(row[column])}</td>`)
+                .join("")}</tr>`
           )
           .join("");
-
-        // Mise à jour du tableau des Reliquats (Basé sur Avancement hors bloqués)
-        const totalReliquats = reliquatNonRacc;
-        document.getElementById("reliquatBody").innerHTML = `
-            <tr>
-                <td>${s.encours}</td>
-                <td>${s.pco}</td>
-                <td>${s.etude}</td>
-                <td>${s.pm}</td>
-                <td>${s.noBox}</td>
-                <td class="bg-itc-dark fw-bold text-white">${totalReliquats}</td>
-            </tr>
+        return `
+          <div>
+            <h5 class="mb-2">${title}</h5>
+            <div class="report-table-wrap shadow-sm">
+              <table class="table table-sm table-bordered report-table mb-0">
+                <thead><tr>${head}</tr></thead>
+                <tbody>${body}</tbody>
+              </table>
+            </div>
+          </div>
         `;
-
-        document.getElementById("objectifBody").innerHTML = `
-          <tr>
-            <td class="fw-bold">${details.objectif.realisation}</td>
-            <td>${details.objectif.objectifMoov}</td>
-            <td class="fw-bold">${details.objectif.taux.toFixed(1)}%</td>
-          </tr>
-        `;
-
-        document.getElementById("statusBody").innerHTML = `
-          <tr>
-            <td>${details.status.horsZone}</td>
-            <td>${details.status.sansPco}</td>
-            <td>${details.status.avecPco}</td>
-            <td>${details.status.autre}</td>
-            <td>${details.status.etude}</td>
-            <td class="fw-bold">${details.status.raccorde}</td>
-            <td class="fw-bold">${details.status.pourcentage.toFixed(2)}%</td>
-          </tr>
-        `;
-
-        updateChart(s);
-        updateDailyChart(details.daily);
-        updateObjectifChart(details.objectif);
-        updateStatusChart(details.status);
       }
-      function updateChart(s) {
-        if (chartInstance) chartInstance.destroy();
-        const canvas = document.getElementById("chartReliquats");
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        chartInstance = new Chart(ctx, {
-          type: "doughnut",
-          data: {
-            labels: ["En cours", "PCO", "Études", "PM", "Sans Box"],
-            datasets: [
-              {
-                data: [s.encours, s.pco, s.etude, s.pm, s.noBox],
-                backgroundColor: [
-                  "#007bff",
-                  "#ffc107",
-                  "#17a2b8",
-                  "#fd7e14",
-                  "#6c757d",
-                ],
-              },
-            ],
-          },
-          options: {
-            maintainAspectRatio: false,
-            plugins: { legend: { position: "right" } },
-          },
+
+      function formatCell(value) {
+        if (typeof value === "number") return formatNumber(value);
+        return value ?? "";
+      }
+
+      function generateReport() {
+        if (!state.workbookRows) return;
+        state.reportRows = buildReport();
+        const { recruitment, waiting, production } = state.reportRows;
+
+        document.getElementById("dailyConnectedCount").textContent = formatNumber(
+          recruitment[0]["Raccordement du Jour"]
+        );
+        document.getElementById("totalInstanceCount").textContent = formatNumber(
+          recruitment[0].Total
+        );
+        document.getElementById("reportOutput").innerHTML = [
+          renderTable("Recrutement - Etudes", recruitment),
+          renderTable("Clients en attente de raccordement", waiting),
+          renderTable("Production Journaliere", production),
+        ].join("");
+        exportBtn.disabled = false;
+        setMessage(
+          "success",
+          "Tableaux generes avec les regles configurees."
+        );
+      }
+
+      function exportReport() {
+        if (!state.reportRows) return;
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(
+          workbook,
+          XLSX.utils.json_to_sheet(state.reportRows.recruitment),
+          "Recrutement - Etudes"
+        );
+        XLSX.utils.book_append_sheet(
+          workbook,
+          XLSX.utils.json_to_sheet(state.reportRows.waiting),
+          "Clients en attente"
+        );
+        XLSX.utils.book_append_sheet(
+          workbook,
+          XLSX.utils.json_to_sheet(state.reportRows.production),
+          "Production Journaliere"
+        );
+
+        const datePart = reportDateInput.value.replaceAll("-", "");
+        XLSX.writeFile(workbook, `Reporting-DG-${datePart}.xlsx`);
+      }
+
+      ["dragenter", "dragover"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropZone.classList.add("drag-over");
         });
-      }
+      });
 
-      function updateDailyChart(daily) {
-        if (chartDailyInstance) chartDailyInstance.destroy();
-        const canvas = document.getElementById("chartDaily");
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        chartDailyInstance = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: daily.labels,
-            datasets: [
-              {
-                label: "Reçues",
-                data: daily.recues,
-                backgroundColor: "#17a2b8",
-              },
-              {
-                label: "Raccordées",
-                data: daily.raccordes,
-                backgroundColor: "#28a745",
-              },
-            ],
-          },
-          options: {
-            maintainAspectRatio: false,
-            plugins: { legend: { position: "top" } },
-            scales: { y: { beginAtZero: true } },
-          },
+      ["dragleave", "drop"].forEach((eventName) => {
+        dropZone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropZone.classList.remove("drag-over");
         });
-      }
+      });
 
-      function updateObjectifChart(objectif) {
-        if (chartObjectifInstance) chartObjectifInstance.destroy();
-        const canvas = document.getElementById("chartObjectif");
-        if (!canvas || !objectif) return;
+      dropZone.addEventListener("drop", (event) => {
+        const file = event.dataTransfer.files?.[0];
+        if (!file) return;
 
-        const taux = Number(objectif.taux || 0);
-        const ctx = canvas.getContext("2d");
-        chartObjectifInstance = new Chart(ctx, {
-          data: {
-            labels: ["Performance hebdo"],
-            datasets: [
-              {
-                type: "bar",
-                label: "Réalisation",
-                data: [objectif.realisation || 0],
-                backgroundColor: "#28a745",
-                borderRadius: 6,
-              },
-              {
-                type: "bar",
-                label: "Objectif",
-                data: [objectif.objectifMoov || 0],
-                backgroundColor: "#004a99",
-                borderRadius: 6,
-              },
-              {
-                type: "line",
-                label: "Taux (%)",
-                data: [taux],
-                borderColor: "#f39200",
-                backgroundColor: "#f39200",
-                yAxisID: "y1",
-                tension: 0.35,
-              },
-            ],
-          },
-          options: {
-            maintainAspectRatio: false,
-            plugins: { legend: { position: "top" } },
-            scales: {
-              y: { beginAtZero: true },
-              y1: {
-                beginAtZero: true,
-                position: "right",
-                grid: { drawOnChartArea: false },
-                suggestedMax: Math.max(100, Math.ceil(taux / 10) * 10 || 100),
-              },
-            },
-          },
-        });
-      }
-
-      function updateStatusChart(status) {
-        if (chartStatusInstance) chartStatusInstance.destroy();
-        const canvas = document.getElementById("chartStatus");
-        if (!canvas || !status) return;
-
-        const ctx = canvas.getContext("2d");
-        chartStatusInstance = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: [
-              "Hors zone",
-              "Sans PCO",
-              "Avec PCO",
-              "Autre",
-              "Étude",
-              "Raccordé",
-            ],
-            datasets: [
-              {
-                label: "Volume",
-                data: [
-                  status.horsZone || 0,
-                  status.sansPco || 0,
-                  status.avecPco || 0,
-                  status.autre || 0,
-                  status.etude || 0,
-                  status.raccorde || 0,
-                ],
-                backgroundColor: [
-                  "#dc3545",
-                  "#ffc107",
-                  "#0d6efd",
-                  "#6f42c1",
-                  "#20c997",
-                  "#198754",
-                ],
-                borderRadius: 6,
-              },
-            ],
-          },
-          options: {
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true } },
-          },
-        });
-      }
-
-      // Consolidated toggle (mapping removed)
-      function toggleConsolidated(val) {
-        treatConsolidated = !!val;
-      }
-      window.toggleConsolidated = toggleConsolidated;
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        fileInput.files = dataTransfer.files;
+        setSelectedFile(file);
+      });
     </script>
-    <!-- mapping configuration removed -->
   </body>
 </html>
