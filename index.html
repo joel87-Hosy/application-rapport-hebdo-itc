@@ -351,11 +351,11 @@
             "ras",
             "deploiement pco",
           ],
+          horsZoneStudy: ["hors zone"],
           outOfZone: [
-            "hors zone",
             "hors zone couverture pco",
-            "hors zone couverture plaque",
             "hors zone couverture sous plaque",
+            "ras",
           ],
           activeConnectionInProgress: [
             "en cours de raccordement",
@@ -824,10 +824,7 @@
           }
           if (
             equalsAny(problem, RULES.statuses.outOfZone) &&
-            containsIsoDate(
-              getCombinedValue(row, RULES.columns.instanceComments),
-              isoDate
-            )
+            equalsAny(study, RULES.statuses.horsZoneStudy)
           ) {
             instanceGroups.outOfZone.push(row);
           }
@@ -926,7 +923,7 @@
             "Instances Sans PCO - Cumul": instanceGroups.withoutPco.length,
             "Instances Sans PCO - Delai Moyen":
               averageDuration(instanceWaitingDelay(instanceGroups.withoutPco)),
-            "Instances Avec PCO - Cumul": instanceGroups.withPco.length,
+            "Instances Avec PCO - Cumul": recruitmentWithPco.length,
             "Instances Avec PCO - Delai Moyen":
               averageDuration(
                 instanceConnectionDelay(connectedInstanceTodayGroups.withPco)
