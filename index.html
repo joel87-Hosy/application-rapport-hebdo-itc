@@ -300,6 +300,11 @@
           instanceCommune: "Commune",
           instanceContact1: ["Contact 1", "Contact1"],
           instanceContact2: ["Contact 2", "Contact2"],
+          instanceTeam: [
+            "Equipe raccordement",
+            "Équipe raccordement",
+            "Equipe Raccordement",
+          ],
           instanceDate: "Date enregistrement",
           instanceSendDate: [
             "Date d'envoi aux prestataires",
@@ -415,6 +420,58 @@
         const date = excelDateToDate(value);
         if (!date) return false;
         return date.toISOString().slice(0, 10) === isoDate;
+      }
+
+      function toIsoDate(date) {
+        return date.toISOString().slice(0, 10);
+      }
+
+      function startOfIsoWeek(isoDate) {
+        const date = new Date(`${isoDate}T00:00:00`);
+        if (Number.isNaN(date.getTime())) return isoDate;
+        const day = date.getDay() || 7;
+        date.setDate(date.getDate() - day + 1);
+        return toIsoDate(date);
+      }
+
+      function endOfIsoWeek(isoDate) {
+        const date = new Date(`${startOfIsoWeek(isoDate)}T00:00:00`);
+        if (Number.isNaN(date.getTime())) return isoDate;
+        date.setDate(date.getDate() + 6);
+        return toIsoDate(date);
+      }
+
+      function previousCompletedWeekRange(isoDate) {
+        const currentWeekStart = new Date(`${startOfIsoWeek(isoDate)}T00:00:00`);
+        if (Number.isNaN(currentWeekStart.getTime())) {
+          return { start: isoDate, end: isoDate };
+        }
+        currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+        const previousWeekEnd = new Date(currentWeekStart);
+        previousWeekEnd.setDate(previousWeekEnd.getDate() + 6);
+        return {
+          start: toIsoDate(currentWeekStart),
+          end: toIsoDate(previousWeekEnd),
+        };
+      }
+
+      function startOfMonth(isoDate) {
+        const date = new Date(`${isoDate}T00:00:00`);
+        if (Number.isNaN(date.getTime())) return isoDate;
+        return toIsoDate(new Date(date.getFullYear(), date.getMonth(), 1));
+      }
+
+      function endOfMonth(isoDate) {
+        const date = new Date(`${isoDate}T00:00:00`);
+        if (Number.isNaN(date.getTime())) return isoDate;
+        return toIsoDate(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+      }
+
+      function inIsoRange(value, startIsoDate, endIsoDate) {
+        const date = excelDateToDate(value);
+        if (!date) return false;
+        const isoDate = toIsoDate(date);
+        return isoDate >= startIsoDate && isoDate <= endIsoDate;
       }
 
       function addDaysIso(isoDate, days) {
@@ -626,6 +683,10 @@
         return date.toLocaleDateString("fr-FR");
       }
 
+      function formatIsoDateLabel(isoDate) {
+        return formatDateValue(`${isoDate}T00:00:00`);
+      }
+
       function renderStatusDetails(status, rows) {
         const communes = {};
         rows.forEach((row) => {
@@ -686,6 +747,38 @@
             ${communeHtml}
           </details>
         `;
+      }
+
+      function buildTeamRanking(rows, periodLabel, startIsoDate, endIsoDate) {
+        const teamCounts = {};
+        rows.forEach((row) => {
+          if (
+            !equalsAny(
+              getValue(row, RULES.columns.instanceProgress),
+              RULES.statuses.connected
+            ) ||
+            !inIsoRange(
+              getValue(row, RULES.columns.instanceConnectionDate),
+              startIsoDate,
+              endIsoDate
+            )
+          ) {
+            return;
+          }
+
+          const team =
+            getValue(row, RULES.columns.instanceTeam) || "Equipe non renseignee";
+          teamCounts[team] = (teamCounts[team] || 0) + 1;
+        });
+
+        return Object.entries(teamCounts)
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr"))
+          .map(([team, count], index) => ({
+            Periode: periodLabel,
+            Rang: index + 1,
+            Equipe: team,
+            "Instances realisees": count,
+          }));
       }
 
       function buildReport() {
@@ -852,12 +945,45 @@
             ),
           },
         ];
+        const completedWeek = previousCompletedWeekRange(isoDate);
+        const weekStart = completedWeek.start;
+        const weekEnd = completedWeek.end;
+        const monthStart = startOfMonth(isoDate);
+        const monthEnd = endOfMonth(isoDate);
+        const teamRankingWeek = buildTeamRanking(
+          instances,
+          `Semaine du ${formatIsoDateLabel(weekStart)} au ${formatIsoDateLabel(weekEnd)}`,
+          weekStart,
+          weekEnd
+        );
+        const teamRankingMonth = buildTeamRanking(
+          instances,
+          `Mois du ${formatIsoDateLabel(monthStart)} au ${formatIsoDateLabel(monthEnd)}`,
+          monthStart,
+          monthEnd
+        );
 
-        return { recruitment, waiting, production };
+        return {
+          recruitment,
+          waiting,
+          production,
+          teamRankingWeek,
+          teamRankingMonth,
+        };
       }
 
       function renderTable(title, rows) {
         const columns = Object.keys(rows[0] || {});
+        if (!columns.length) {
+          return `
+            <div>
+              <h5 class="mb-2">${title}</h5>
+              <div class="report-table-wrap shadow-sm p-3 small-muted">
+                Aucune donnee pour cette periode.
+              </div>
+            </div>
+          `;
+        }
         const head = columns.map((column) => `<th>${column}</th>`).join("");
         const body = rows
           .map(
@@ -888,7 +1014,13 @@
       function generateReport() {
         if (!state.workbookRows) return;
         state.reportRows = buildReport();
-        const { recruitment, waiting, production } = state.reportRows;
+        const {
+          recruitment,
+          waiting,
+          production,
+          teamRankingWeek,
+          teamRankingMonth,
+        } = state.reportRows;
 
         document.getElementById("dailyConnectedCount").textContent = formatNumber(
           recruitment[0]["Raccordement du Jour"]
@@ -900,6 +1032,8 @@
           renderTable("Recrutement - Etudes", recruitment),
           renderTable("Clients en attente de raccordement", waiting),
           renderTable("Production Journaliere", production),
+          renderTable("Classement des equipes - Semaine", teamRankingWeek),
+          renderTable("Classement des equipes - Mois", teamRankingMonth),
         ].join("");
         exportBtn.disabled = false;
         setMessage(
@@ -925,6 +1059,16 @@
           workbook,
           XLSX.utils.json_to_sheet(state.reportRows.production),
           "Production Journaliere"
+        );
+        XLSX.utils.book_append_sheet(
+          workbook,
+          XLSX.utils.json_to_sheet(state.reportRows.teamRankingWeek),
+          "Equipes semaine"
+        );
+        XLSX.utils.book_append_sheet(
+          workbook,
+          XLSX.utils.json_to_sheet(state.reportRows.teamRankingMonth),
+          "Equipes mois"
         );
 
         const datePart = reportDateInput.value.replaceAll("-", "");
