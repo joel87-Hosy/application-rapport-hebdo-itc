@@ -354,6 +354,7 @@
           activeConnectionInProgress: [
             "en cours de raccordement",
             "raccordement en cours",
+            "raccordement en cour",
           ],
           activeConnectionImplantation: ["implantation pm"],
           connected: ["raccorde"],
@@ -805,21 +806,13 @@
           }
           if (
             isActiveConnection &&
-            equalsAny(study, RULES.statuses.withoutPco) &&
-            containsIsoDate(
-              getCombinedValue(row, RULES.columns.instanceComments),
-              isoDate
-            )
+            includesAny(study, RULES.statuses.withoutPco)
           ) {
             instanceGroups.withoutPco.push(row);
           }
           if (
             isActiveConnection &&
-            equalsAny(study, RULES.statuses.withPco) &&
-            containsIsoDate(
-              getCombinedValue(row, RULES.columns.instanceComments),
-              isoDate
-            )
+            includesAny(study, RULES.statuses.withPco)
           ) {
             instanceGroups.withPco.push(row);
           }
