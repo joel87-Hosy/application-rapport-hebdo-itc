@@ -599,10 +599,54 @@
           normalize(name).includes(normalize(wantedName))
         );
         if (!sheetName) return [];
-        return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+        const sheet = workbook.Sheets[sheetName];
+        const range = getActualSheetRange(sheet);
+        return XLSX.utils.sheet_to_json(sheet, {
           defval: "",
+          range,
           raw: true,
         });
+      }
+
+      function getActualSheetRange(sheet) {
+        const cells = Object.keys(sheet).filter(
+          (key) => key[0] !== "!" && sheet[key]?.v !== undefined && sheet[key]?.v !== ""
+        );
+        if (!cells.length) return sheet["!ref"];
+
+        const declaredRange = XLSX.utils.decode_range(sheet["!ref"]);
+        let maxUsefulColumn = declaredRange.s.c;
+        cells.forEach((cellRef) => {
+          const cell = XLSX.utils.decode_cell(cellRef);
+          if (cell.r !== declaredRange.s.r) return;
+          const header = normalize(sheet[cellRef]?.v);
+          if (!header || /^colonne\d+$/.test(header)) return;
+          maxUsefulColumn = Math.max(maxUsefulColumn, cell.c);
+        });
+
+        const range = cells.reduce(
+          (acc, cellRef) => {
+            const cell = XLSX.utils.decode_cell(cellRef);
+            if (cell.c > maxUsefulColumn) return acc;
+            return {
+              s: {
+                r: Math.min(acc.s.r, cell.r),
+                c: Math.min(acc.s.c, cell.c),
+              },
+              e: {
+                r: Math.max(acc.e.r, cell.r),
+                c: Math.max(acc.e.c, cell.c),
+              },
+            };
+          },
+          {
+            s: { r: Number.MAX_SAFE_INTEGER, c: Number.MAX_SAFE_INTEGER },
+            e: { r: 0, c: 0 },
+          }
+        );
+
+        sheet["!ref"] = XLSX.utils.encode_range(range);
+        return range;
       }
 
       function setMessage(type, text) {
@@ -622,6 +666,10 @@
             const workbook = XLSX.read(event.target.result, {
               type: "array",
               cellDates: true,
+              cellFormula: false,
+              cellHTML: false,
+              cellNF: false,
+              cellStyles: false,
             });
             const instances = sheetToRows(workbook, RULES.instanceSheet);
             const connected = sheetToRows(workbook, RULES.connectedSheet);
@@ -832,10 +880,10 @@
             equalsAny(progress, RULES.statuses.connected) &&
             sameDay(getValue(row, RULES.columns.instanceConnectionDate), isoDate)
           ) {
-            if (equalsAny(study, RULES.statuses.withoutPco)) {
+            if (includesAny(study, RULES.statuses.withoutPco)) {
               connectedInstanceTodayGroups.withoutPco.push(row);
             }
-            if (equalsAny(study, RULES.statuses.withPco)) {
+            if (includesAny(study, RULES.statuses.withPco)) {
               connectedInstanceTodayGroups.withPco.push(row);
             }
           }
