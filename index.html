@@ -345,6 +345,12 @@
           ],
           withoutPco: ["sans pco"],
           withPco: ["avec pco"],
+          recruitmentWithPcoStudy: ["avec pco", "pco sature"],
+          recruitmentWithPcoProblem: [
+            "indisponibilite de pon",
+            "ras",
+            "deploiement pco",
+          ],
           outOfZone: [
             "hors zone",
             "hors zone couverture pco",
@@ -872,6 +878,17 @@
               getValue(row, RULES.columns.instanceConnectionDate)
             );
           });
+        const recruitmentWithPco = instances.filter(
+          (row) =>
+            equalsAny(
+              getValue(row, RULES.columns.instanceProblem),
+              RULES.statuses.recruitmentWithPcoProblem
+            ) &&
+            includesAny(
+              getValue(row, RULES.columns.instanceStudy),
+              RULES.statuses.recruitmentWithPcoStudy
+            )
+        );
         const recruitment = [
           {
             Date: isoDate,
@@ -893,12 +910,12 @@
             ).length,
             "Cumul Instances en Etude": instanceGroups.pendingStudy.length,
             "Cumul Instances Sans PCO": instanceGroups.withoutPco.length,
-            "Cumul Instances Avec PCO": instanceGroups.withPco.length,
+            "Cumul Instances Avec PCO": recruitmentWithPco.length,
             "Cumul Instances Hors Zone": instanceGroups.outOfZone.length,
             Total:
               instanceGroups.pendingStudy.length +
               instanceGroups.withoutPco.length +
-              instanceGroups.withPco.length +
+              recruitmentWithPco.length +
               instanceGroups.outOfZone.length,
           },
         ];
