@@ -353,8 +353,25 @@
           ],
           horsZoneStudy: ["hors zone"],
           outOfZone: [
+            "hors zone couverture",
+          ],
+          excludedOutOfZoneProgress: ["reatribution", "reattribution", "raccorde"],
+          waitingWithPcoExcludedProgress: [
+            "raccorde",
+            "bloque",
+            "reatribution",
+            "reattribution",
+          ],
+          waitingWithPcoExcludedStudy: [
+            "sans pco",
+            "reprise etude",
+            "reprise d'etude",
+            "reprise d etude",
+          ],
+          waitingWithPcoExcludedProblem: [
             "hors zone couverture pco",
             "hors zone couverture sous plaque",
+            "indisponibilite de pon",
             "ras",
           ],
           activeConnectionInProgress: [
@@ -539,6 +556,12 @@
 
       function averageDuration(values) {
         return formatDuration(averageRaw(values));
+      }
+
+      function averageDurationDays(values) {
+        const hours = averageRaw(values);
+        if (!Number.isFinite(hours) || hours <= 0) return "0 jour(s)";
+        return `${Math.round(hours / 24)} jour(s)`;
       }
 
       function includesAny(value, expected) {
@@ -871,8 +894,9 @@
             instanceGroups.withPco.push(row);
           }
           if (
-            equalsAny(problem, RULES.statuses.outOfZone) &&
-            equalsAny(study, RULES.statuses.horsZoneStudy)
+            includesAny(problem, RULES.statuses.outOfZone) &&
+            equalsAny(study, RULES.statuses.horsZoneStudy) &&
+            !equalsAny(progress, RULES.statuses.excludedOutOfZoneProgress)
           ) {
             instanceGroups.outOfZone.push(row);
           }
@@ -883,7 +907,7 @@
             if (includesAny(study, RULES.statuses.withoutPco)) {
               connectedInstanceTodayGroups.withoutPco.push(row);
             }
-            if (includesAny(study, RULES.statuses.withPco)) {
+            if (!includesAny(study, RULES.statuses.withoutPco)) {
               connectedInstanceTodayGroups.withPco.push(row);
             }
           }
@@ -914,17 +938,18 @@
             return days === null ? null : days * 24;
           });
         const instanceCanvasConnectionDelay = (rows) =>
-          rows.map((row) => {
-            const canvasDelay = Number(getValue(row, RULES.columns.instanceDelay));
-            if (Number.isFinite(canvasDelay)) return canvasDelay * 24;
-            return hoursBetweenValues(
-              getValue(row, RULES.columns.instanceSendDate) ||
-                getValue(row, RULES.columns.instanceDate),
+          rows.map((row) =>
+            hoursBetweenValues(
+              getValue(row, RULES.columns.instanceSendDate),
               getValue(row, RULES.columns.instanceConnectionDate)
-            );
-          });
+            )
+          );
         const recruitmentWithPco = instances.filter(
           (row) =>
+            !equalsAny(
+              getValue(row, RULES.columns.instanceProgress),
+              RULES.statuses.connected
+            ) &&
             equalsAny(
               getValue(row, RULES.columns.instanceProblem),
               RULES.statuses.recruitmentWithPcoProblem
@@ -964,18 +989,31 @@
               instanceGroups.outOfZone.length,
           },
         ];
+        const waitingWithPco = instances.filter(
+          (row) =>
+            !equalsAny(
+              getValue(row, RULES.columns.instanceProgress),
+              RULES.statuses.waitingWithPcoExcludedProgress
+            ) &&
+            !includesAny(
+              getValue(row, RULES.columns.instanceStudy),
+              RULES.statuses.waitingWithPcoExcludedStudy
+            ) &&
+            !equalsAny(
+              getValue(row, RULES.columns.instanceProblem),
+              RULES.statuses.waitingWithPcoExcludedProblem
+            )
+        );
 
         const waiting = [
           {
             Date: isoDate,
             "Instances Sans PCO - Cumul": instanceGroups.withoutPco.length,
             "Instances Sans PCO - Delai Moyen":
-              averageDuration(instanceWaitingDelay(instanceGroups.withoutPco)),
-            "Instances Avec PCO - Cumul": recruitmentWithPco.length,
+              averageDurationDays(instanceWaitingDelay(instanceGroups.withoutPco)),
+            "Instances Avec PCO - Cumul": waitingWithPco.length,
             "Instances Avec PCO - Delai Moyen":
-              averageDuration(
-                instanceConnectionDelay(connectedInstanceTodayGroups.withPco)
-              ),
+              averageDurationDays(instanceWaitingDelay(waitingWithPco)),
           },
         ];
 
@@ -994,7 +1032,7 @@
             "Sans PCO - Delai Moyen": averageDuration(sansPcoDelay),
             "Clients raccordes Avec PCO":
               connectedInstanceTodayGroups.withPco.length,
-            "Avec PCO - Delai Moyen": averageDuration(avecPcoDelay),
+            "Avec PCO - Delai Moyen": averageDurationDays(avecPcoDelay),
             "Delai Moyen de raccordement": averageDuration(
               instanceCanvasConnectionDelay(connectedInstanceToday)
             ),
