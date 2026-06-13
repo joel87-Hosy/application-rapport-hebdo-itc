@@ -348,6 +348,7 @@
           recruitmentWithPcoStudy: ["avec pco", "pco sature"],
           recruitmentWithPcoProblem: [
             "indisponibilite de pon",
+            "probleme materiel",
             "ras",
             "deploiement pco",
           ],
@@ -356,26 +357,16 @@
             "hors zone couverture",
           ],
           excludedOutOfZoneProgress: ["reatribution", "reattribution", "raccorde"],
-          waitingWithPcoExcludedProgress: [
-            "raccorde",
-            "bloque",
-            "reatribution",
-            "reattribution",
+          waitingWithPcoProgress: [
+            "raccordement en cour",
+            "raccordement en cours",
+            "en cour de raccordement",
+            "en cours de raccordement",
           ],
-          waitingWithPcoExcludedStudy: [
-            "sans pco",
-            "reprise etude",
-            "reprise d'etude",
-            "reprise d etude",
-          ],
-          waitingWithPcoExcludedProblem: [
-            "hors zone couverture pco",
-            "hors zone couverture sous plaque",
-            "indisponibilite de pon",
-            "ras",
-          ],
+          waitingWithPcoStudy: ["avec pco", "hors zone", "pco sature"],
           activeConnectionInProgress: [
             "en cours de raccordement",
+            "en cour de raccordement",
             "raccordement en cours",
             "raccordement en cour",
           ],
@@ -991,17 +982,13 @@
         ];
         const waitingWithPco = instances.filter(
           (row) =>
-            !equalsAny(
+            equalsAny(
               getValue(row, RULES.columns.instanceProgress),
-              RULES.statuses.waitingWithPcoExcludedProgress
+              RULES.statuses.waitingWithPcoProgress
             ) &&
-            !includesAny(
+            includesAny(
               getValue(row, RULES.columns.instanceStudy),
-              RULES.statuses.waitingWithPcoExcludedStudy
-            ) &&
-            !equalsAny(
-              getValue(row, RULES.columns.instanceProblem),
-              RULES.statuses.waitingWithPcoExcludedProblem
+              RULES.statuses.waitingWithPcoStudy
             )
         );
 
