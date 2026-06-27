@@ -48,6 +48,7 @@
         display: grid;
         grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
         gap: 18px;
+        align-items: start;
         max-width: 1380px;
         margin: 0 auto;
       }
@@ -61,6 +62,13 @@
       }
 
       .panel {
+        display: flex;
+        flex-direction: column;
+        position: sticky;
+        top: 70px;
+        max-height: calc(100vh - 88px);
+        min-height: 0;
+        overflow: hidden;
         padding: 18px;
       }
 
@@ -125,8 +133,23 @@
       }
 
       .status-list {
-        max-height: 220px;
+        flex: 1;
+        max-height: none;
+        min-height: 0;
         overflow: auto;
+      }
+
+      .status-list-wrap {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      #reportOutput {
+        max-height: max(320px, calc(100vh - 245px));
+        overflow-y: auto;
+        padding-right: 4px;
       }
 
       .status-item {
@@ -176,6 +199,19 @@
       @media (max-width: 980px) {
         .workspace {
           grid-template-columns: 1fr;
+        }
+
+        .panel {
+          position: static;
+          max-height: none;
+        }
+
+        .status-list {
+          max-height: 260px;
+        }
+
+        #reportOutput {
+          max-height: 70vh;
         }
 
         .metric-grid {
@@ -253,7 +289,7 @@
 
           <hr />
 
-          <div>
+          <div class="status-list-wrap">
             <h6 class="fw-semibold mb-2">Statuts detectes</h6>
             <div id="statusList" class="status-list small-muted">
               Aucun canevas charge.
