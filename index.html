@@ -36,11 +36,17 @@
       }
 
       .navbar-logo {
-        height: 34px;
-        width: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 34px;
         margin-right: 10px;
         background: #ffffff;
-        padding: 2px 6px;
+        color: var(--itc-blue);
+        font-weight: 800;
+        letter-spacing: 0;
+        line-height: 1;
+        padding: 4px 8px;
         border-radius: 6px;
       }
 
@@ -224,11 +230,7 @@
     <nav class="navbar navbar-dark p-2 shadow-sm">
       <div class="container-fluid">
         <span class="navbar-brand d-flex align-items-center">
-          <img
-            src="assets/logo-ITC-NW-01-fond-blanc-01.jpg"
-            alt="Logo ITC"
-            class="navbar-logo"
-          />
+          <span class="navbar-logo" aria-label="Logo ITC">ITC</span>
           <span>ITC - Reporting DG</span>
         </span>
         <span id="fileLabel" class="badge bg-warning text-dark fs-6">
@@ -453,23 +455,28 @@
         return key ? row[key] : "";
       }
 
+      function isValidDate(value) {
+        return value instanceof Date && !Number.isNaN(value.getTime());
+      }
+
       function excelDateToDate(value) {
         if (!value && value !== 0) return null;
-        if (value instanceof Date) return value;
+        if (value instanceof Date) return isValidDate(value) ? value : null;
         if (typeof value === "number") {
           const utcValue = (value - 25569) * 86400;
-          return new Date(utcValue * 1000);
+          const date = new Date(utcValue * 1000);
+          return isValidDate(date) ? date : null;
         }
         if (typeof value === "string") {
           const parsed = new Date(value);
-          return Number.isNaN(parsed.getTime()) ? null : parsed;
+          return isValidDate(parsed) ? parsed : null;
         }
         return null;
       }
 
       function sameDay(value, isoDate) {
         const date = excelDateToDate(value);
-        if (!date) return false;
+        if (!isValidDate(date)) return false;
         return date.toISOString().slice(0, 10) === isoDate;
       }
 
